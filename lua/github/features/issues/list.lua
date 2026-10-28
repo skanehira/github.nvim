@@ -212,6 +212,7 @@ function M.read(buf, target)
         states[buf] = nil
       end,
     })
+    require("github.features.issues.state").attach(buf)
     vim.bo[buf].buftype = "nofile"
     vim.bo[buf].swapfile = false
     vim.keymap.set("n", "ghs", function()
