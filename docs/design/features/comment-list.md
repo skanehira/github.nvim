@@ -22,6 +22,8 @@
 | コメント一覧・プレビューの制御・表示 | 機能 | `lua/github/features/comments/list.lua` |
 | 振る舞いの単体・結合検証 | テスト | `lua/github/features/comments/list_spec.lua` |
 
+一覧の後続操作は `require("github.features.comments.list").state(buf)` から `target`、表示順の `items`、行番号をキーとする `selected` を参照できる。`refresh(buf)` は同じ一覧を再取得し、操作開始時に選択を解除する。
+
 ## エッジケースの決定
 
 空: 0件表示、本文先頭行が空でも行を保持する。境界: 100件まで、画面ページ送りはしない。エラー: 初回は失敗を示し、再取得失敗は旧結果を保持する。並行: 要求世代とバッファ所有者で古い応答を破棄する。再表示: 明示的な再読込でそのIssueを再取得し、選択印を解除する。
