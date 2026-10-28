@@ -215,6 +215,9 @@ function M.read(buf, target)
     require("github.features.issues.state").attach(buf)
     vim.bo[buf].buftype = "nofile"
     vim.bo[buf].swapfile = false
+    vim.keymap.set("n", "ghn", function()
+      require("github.features.issues.create").open_from_list(buf)
+    end, { buffer = buf })
     vim.keymap.set("n", "ghs", function()
       vim.ui.input({ prompt = "Search issues: ", default = state.condition }, function(value)
         if value ~= nil then
