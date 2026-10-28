@@ -3,7 +3,6 @@ local states = {}
 local gh = require("github.core.gh")
 local buffers = require("github.core.buffer")
 local request = require("github.core.request")
-local uri = require("github.core.uri")
 
 local function notify(state, message, level)
   local t = state.target
@@ -24,6 +23,7 @@ function M.read(buf, target)
     vim.bo[buf].swapfile = false
     vim.bo[buf].filetype = "markdown"
     vim.bo[buf].modified = false
+    require("github.core.navigation").event(buf, "gh_open_issue_comment")
   end
 end
 
@@ -43,7 +43,7 @@ function M.write(buf)
   end
   local t = state.target
   local endpoint = ("repos/%s/%s/issues/%d/comments"):format(t.owner, t.repo, t.issue_number)
-  local token = request.begin(buf)
+  local token = request.begin(buf, "Saving...")
   gh.new().rest(t, "POST", endpoint, { body = body }, function(data, failure)
     local success = type(data) == "table"
       and type(data.id) == "number"
@@ -80,11 +80,11 @@ function M.open_from_list(buf)
   local t = list.target
   local target =
     { kind = "comment_create", host = t.host, owner = t.owner, repo = t.repo, issue_number = t.issue_number }
-  vim.cmd("edit " .. vim.fn.fnameescape(uri.format(target)))
-  local draft = vim.api.nvim_get_current_buf()
-  if states[draft] then
-    states[draft].list = buf
-  end
+  require("github.core.navigation").open(target, function(draft)
+    if states[draft] then
+      states[draft].list = buf
+    end
+  end)
 end
 
 return M

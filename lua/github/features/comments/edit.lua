@@ -2,7 +2,6 @@ local M = {}
 local gh = require("github.core.gh")
 local request = require("github.core.request")
 local buffers = require("github.core.buffer")
-local uri = require("github.core.uri")
 local states = {}
 
 local function notify(state, message, level)
@@ -60,8 +59,9 @@ function M.read(buf, target)
       end
       state.loaded = true
       vim.bo[buf].modifiable = true
-      vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(data.body, "\n", { plain = true }))
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split((data.body:gsub("\r\n", "\n")), "\n", { plain = true }))
       vim.bo[buf].modified = false
+      require("github.core.navigation").event(buf, "gh_open_issue_comment")
     end)
   end)
 end
@@ -74,6 +74,9 @@ function M.write(buf)
   if not state.loaded then
     return notify(state, "comment not loaded", vim.log.levels.ERROR)
   end
+  if not vim.bo[buf].modified then
+    return
+  end
   local snapshot, err = buffers.begin_save(buf)
   if not snapshot then
     return notify(state, err, vim.log.levels.WARN)
@@ -83,7 +86,7 @@ function M.write(buf)
     buffers.finish_save(snapshot, false)
     return notify(state, "comment must not be blank", vim.log.levels.ERROR)
   end
-  local token = request.begin(buf)
+  local token = request.begin(buf, "Saving...")
   gh.new().rest(state.target, "PATCH", endpoint(state.target), { body = body }, function(data, failure)
     local success = type(data) == "table" and tonumber(data.id) == state.target.comment_id
     buffers.finish_save(snapshot, success)
@@ -123,6 +126,6 @@ function M.open_from_list(buf)
     issue_number = state.target.issue_number,
     comment_id = item.id,
   }
-  vim.cmd("edit " .. vim.fn.fnameescape(uri.format(target)))
+  require("github.core.navigation").open(target)
 end
 return M

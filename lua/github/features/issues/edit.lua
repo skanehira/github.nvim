@@ -2,7 +2,6 @@ local M = {}
 local gh = require("github.core.gh")
 local request = require("github.core.request")
 local buffers = require("github.core.buffer")
-local uri = require("github.core.uri")
 local states = {}
 local read_query = [[query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) { issue(number: $number) { id title body } }
@@ -48,12 +47,38 @@ local function read(buf, target, field)
       end
       state.id, state.loaded = issue.id, true
       vim.bo[buf].modifiable = true
-      vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(issue[field], "\n", { plain = true }))
+      vim.api.nvim_buf_set_lines(
+        buf,
+        0,
+        -1,
+        false,
+        vim.split((issue[field]:gsub("\r\n", "\n")), "\n", { plain = true })
+      )
       vim.bo[buf].modified = false
+      if field == "body" then
+        require("github.core.navigation").event(buf, "gh_open_issue")
+      end
     end)
   end)
 end
 function M.read(buf, target)
+  require("github.core.navigation").configure(buf, "markdown")
+  for key, destination in pairs({ gha = "issue_assignees", ghl = "issue_labels", ghm = "comment_list" }) do
+    local kind = destination
+    require("github.core.navigation").map(
+      buf,
+      key,
+      key == "gha" and "gh:issue:assignees" or key == "ghl" and "gh:issue:labels" or "gh:issue:comments",
+      function()
+        local next_target = vim.deepcopy(target)
+        next_target.kind = kind
+        require("github.core.navigation").open(next_target)
+      end
+    )
+  end
+  require("github.core.navigation").map(buf, "ght", "gh:issue:edit:title", function()
+    M.open_title(target)
+  end)
   read(buf, target, "body")
 end
 function M.write(buf)
@@ -63,6 +88,9 @@ function M.write(buf)
   end
   if not state.loaded then
     return notify(state, "issue not loaded", vim.log.levels.ERROR)
+  end
+  if not vim.bo[buf].modified then
+    return
   end
   local snapshot, err = buffers.begin_save(buf)
   if not snapshot then
@@ -75,7 +103,7 @@ function M.write(buf)
   end
   local input = { id = state.id }
   input[state.field] = text
-  local token = request.begin(buf)
+  local token = request.begin(buf, "Saving...")
   gh.new().graphql(state.target, update_query, { input = input }, function(data, failure)
     local update = type(data) == "table" and type(data.data) == "table" and data.data.updateIssue
     local result = type(update) == "table" and update.issue
@@ -86,32 +114,49 @@ function M.write(buf)
         return notify(state, failure and failure.reason or "invalid update response", vim.log.levels.ERROR)
       end
       notify(state, state.field .. " saved", vim.log.levels.INFO)
+      if state.field == "title" and not vim.bo[buf].modified then
+        vim.api.nvim_buf_delete(buf, { force = false })
+      end
     end)
   end)
 end
 function M.open_body(target)
-  vim.cmd("edit " .. vim.fn.fnameescape(uri.format(target)))
+  require("github.core.navigation").open(target)
 end
 function M.open_title(target)
   local name = "github.nvim title " .. target.owner .. "/" .. target.repo .. "#" .. target.issue_number
   local buf = vim.fn.bufnr(name)
-  if buf ~= -1 then
-    vim.api.nvim_set_current_buf(buf)
-    if states[buf] then
-      read(buf, target, "title")
-      return
+  local windows = buf ~= -1 and vim.fn.win_findbuf(buf) or {}
+  local win
+  for _, candidate in ipairs(windows) do
+    if vim.api.nvim_win_get_tabpage(candidate) == vim.api.nvim_get_current_tabpage() then
+      win = candidate
+      break
     end
-  else
-    buf = vim.api.nvim_create_buf(true, false)
-    vim.api.nvim_buf_set_name(buf, name)
-    vim.api.nvim_set_current_buf(buf)
   end
-  vim.api.nvim_create_autocmd("BufWriteCmd", {
-    buffer = buf,
-    callback = function()
-      M.write(buf)
-    end,
-  })
+  if win then
+    vim.api.nvim_set_current_win(win)
+  else
+    local original = require("github.core.navigation").capture(vim.api.nvim_get_current_win())
+    vim.cmd("botright 1new")
+    require("github.core.navigation").inherit(vim.api.nvim_get_current_win(), original)
+    if buf == -1 then
+      buf = vim.api.nvim_get_current_buf()
+      vim.api.nvim_buf_set_name(buf, name)
+    else
+      vim.api.nvim_set_current_buf(buf)
+    end
+  end
+  require("github.core.navigation").configure(buf)
+  if not states[buf] then
+    vim.api.nvim_create_autocmd("BufWriteCmd", {
+      buffer = buf,
+      callback = function()
+        M.write(buf)
+      end,
+    })
+  end
   read(buf, target, "title")
 end
+
 return M

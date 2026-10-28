@@ -2,22 +2,14 @@ local M = {}
 local states = {}
 local request = require("github.core.request")
 local gh = require("github.core.gh")
-local uri = require("github.core.uri")
 
 local function render(buf, state)
-  local lines = {}
-  for i, item in ipairs(state.items) do
-    local author = type(item.user) == "table" and item.user.login or nil
-    local first = (type(item.body) == "string" and item.body or ""):match("^[^\n]*")
-    lines[i] = (state.selected[i] and "* " or "") .. (author or "[deleted]") .. ": " .. first
-  end
-  if #lines == 0 then
-    lines = { "0 comments" }
-  end
+  local lines, spans = require("github.core.rows").comments(state.items, state.selected)
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   vim.bo[buf].modified = false
+  require("github.core.highlight").set(buf, spans)
 end
 
 function M.refresh(buf)
@@ -74,12 +66,7 @@ local function preview(buf)
   if not item then
     return
   end
-  vim.cmd("vnew")
-  local preview_buf = vim.api.nvim_get_current_buf()
-  vim.bo[preview_buf].buftype = "nofile"
-  vim.bo[preview_buf].bufhidden = "wipe"
-  vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, vim.split(item.body or "", "\n", { plain = true }))
-  vim.bo[preview_buf].modifiable = false
+  require("github.core.view").preview(item.body or "")
 end
 
 function M.read(buf, target)
@@ -92,29 +79,30 @@ function M.read(buf, target)
         states[buf] = nil
       end,
     })
+    require("github.core.navigation").configure(buf, "gh-issues-comments")
     vim.bo[buf].buftype = "nofile"
     vim.bo[buf].swapfile = false
-    vim.keymap.set("n", "ghy", function()
+    require("github.core.navigation").map(buf, "ghy", "gh:issue:comment:yank", function()
       require("github.features.links.copy").from_list(buf, "comment")
-    end, { buffer = buf })
-    vim.keymap.set("n", "<C-o>", function()
+    end)
+    require("github.core.navigation").map(buf, "<C-o>", "gh:issue:comment:view", function()
       require("github.features.links.open").from_list(buf, "comment")
-    end, { buffer = buf })
-    vim.keymap.set("n", "ghn", function()
+    end)
+    require("github.core.navigation").map(buf, "ghn", "gh:issue:comment:new", function()
       require("github.features.comments.create").open_from_list(buf)
-    end, { buffer = buf })
-    vim.keymap.set("n", "ghe", function()
+    end)
+    require("github.core.navigation").map(buf, "ghe", "gh:issue:comment:edit", function()
       require("github.features.comments.edit").open_from_list(buf)
-    end, { buffer = buf })
-    vim.keymap.set("n", "K", function()
+    end)
+    require("github.core.navigation").map(buf, "K", "gh:issue:comment:preview", function()
       preview(buf)
-    end, { buffer = buf })
-    vim.keymap.set("n", "<C-j>", function()
+    end)
+    require("github.core.navigation").map(buf, "<C-j>", "gh:issue:comment:select:next", function()
       toggle(buf, 1)
-    end, { buffer = buf })
-    vim.keymap.set("n", "<C-k>", function()
+    end)
+    require("github.core.navigation").map(buf, "<C-k>", "gh:issue:comment:select:prev", function()
       toggle(buf, -1)
-    end, { buffer = buf })
+    end)
   end
   M.refresh(buf)
 end
@@ -132,9 +120,15 @@ function M.open_from_list(buf)
     repo = state.target.repo,
     issue_number = item.number,
   }
-  vim.cmd("edit " .. vim.fn.fnameescape(uri.format(target)))
+  require("github.core.navigation").open(target)
 end
 
+function M.clear_selection(buf)
+  if states[buf] and vim.api.nvim_buf_is_loaded(buf) then
+    states[buf].selected = {}
+    render(buf, states[buf])
+  end
+end
 function M.state(buf)
   return states[buf]
 end

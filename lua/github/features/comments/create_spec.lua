@@ -1,3 +1,4 @@
+local old_choose
 local calls, pending, notices, old_run, old_notify
 local function response(i, data)
   pending[i]({ code = 0, stdout = vim.json.encode(data) })
@@ -13,6 +14,10 @@ local function comment()
 end
 describe("comment creation", function()
   before_each(function()
+    old_choose = require("github.core.navigation").choose
+    require("github.core.navigation").choose = function(callback)
+      callback("edit")
+    end
     calls, pending, notices = {}, {}, {}
     old_run, old_notify = require("github.core.process").run, vim.notify
     require("github.core.process").run = function(argv, opts, callback)
@@ -25,6 +30,7 @@ describe("comment creation", function()
     vim.cmd("runtime plugin/github.lua")
   end)
   after_each(function()
+    require("github.core.navigation").choose = old_choose
     require("github.core.process").run, vim.notify = old_run, old_notify
     vim.cmd("silent! %bwipeout!")
   end)

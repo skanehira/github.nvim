@@ -26,12 +26,21 @@ function M.change(buf, desired)
     vim.notify("No issue selected", vim.log.levels.WARN)
     return
   end
+  local progress = require("github.core.progress")
+  local token = progress.start(buf, "Saving...")
+  local revision = state.revision
   local target = vim.deepcopy(state.target)
   local client = require("github.core.gh").new()
   local i = 1
   local function step()
     if i > #targets then
-      if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) and list.state(buf) == state then
+      progress.finish(token)
+      if
+        vim.api.nvim_buf_is_valid(buf)
+        and vim.api.nvim_buf_is_loaded(buf)
+        and list.state(buf) == state
+        and state.revision == revision
+      then
         list.search(buf, state.condition)
       end
       return
@@ -60,9 +69,14 @@ end
 
 function M.attach(buf)
   for key, desired in pairs({ ghc = "CLOSED", gho = "OPEN" }) do
-    vim.keymap.set("n", key, function()
-      M.change(buf, desired)
-    end, { buffer = buf })
+    require("github.core.navigation").map(
+      buf,
+      key,
+      desired == "CLOSED" and "gh:issue:close" or "gh:issue:open",
+      function()
+        M.change(buf, desired)
+      end
+    )
   end
 end
 return M

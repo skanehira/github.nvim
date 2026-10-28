@@ -49,6 +49,7 @@ function M.from_list(buf, kind)
     end
   end
   M.copy(urls)
+  list.clear_selection(buf)
 end
 
 return M

@@ -6,6 +6,7 @@ function M.begin_save(buf)
   end
   local snapshot =
     { buf = buf, tick = vim.api.nvim_buf_get_changedtick(buf), lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false) }
+  snapshot.progress = require("github.core.progress").start(buf, "Saving...")
   active[buf] = snapshot
   return snapshot
 end
@@ -14,6 +15,7 @@ function M.finish_save(snapshot, success)
     return false
   end
   active[snapshot.buf] = nil
+  require("github.core.progress").finish(snapshot.progress)
   if not vim.api.nvim_buf_is_valid(snapshot.buf) then
     return false
   end

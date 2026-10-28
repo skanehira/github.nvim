@@ -25,33 +25,12 @@ local function notify_error(state, err)
   vim.notify("GitHub " .. state.target.owner .. "/" .. state.target.repo .. ": " .. reason, vim.log.levels.ERROR)
 end
 local function render(buf, state)
-  local lines = {}
-  for i, item in ipairs(state.items) do
-    local assignees, labels = {}, {}
-    for _, user in ipairs(item.assignees.nodes) do
-      assignees[#assignees + 1] = user.login
-    end
-    for _, label in ipairs(item.labels.nodes) do
-      labels[#labels + 1] = label.name
-    end
-    local text = string.format(
-      "#%d [%s] %s | assignees: %s | labels: %s | comments: %d",
-      item.number,
-      item.state,
-      item.title,
-      table.concat(assignees, ", "),
-      table.concat(labels, ", "),
-      item.comments.totalCount
-    )
-    lines[i] = (state.selected[i] and "* " or "") .. text
-  end
-  if #lines == 0 then
-    lines = { "0 issues" }
-  end
+  local lines, spans = require("github.core.rows").issues(state.items, state.selected)
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   vim.bo[buf].modified = false
+  require("github.core.highlight").set(buf, spans)
 end
 local function complete_connections(client, state, nodes, done)
   local i, kinds = 1, { "assignees", "labels" }
@@ -127,55 +106,54 @@ function M.search(buf, condition)
   if not state then
     return
   end
+  state.revision = (state.revision or 0) + 1
   state.selected = {}
   if state.success then
     render(buf, state)
   end
   local token = request.begin(buf)
   local client = gh.new()
-  client.graphql(
-    state.target,
-    query,
-    { query = "repo:" .. state.target.owner .. "/" .. state.target.repo .. " type:issue " .. condition },
-    function(data, err)
-      request.apply(token, function()
-        local function fail(reason)
-          notify_error(state, reason)
-          if not state.success then
-            vim.bo[buf].modifiable = true
-            vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "Issue search failed" })
-            vim.bo[buf].modifiable = false
+  client.graphql(state.target, query, {
+    query = "repo:" .. state.target.owner .. "/" .. state.target.repo .. " type:issue " .. condition,
+  }, function(data, err)
+    request.apply(token, function()
+      local function fail(reason)
+        request.finish(token)
+        notify_error(state, reason)
+        if not state.success then
+          vim.bo[buf].modifiable = true
+          vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "Issue search failed" })
+          vim.bo[buf].modifiable = false
+        end
+      end
+      local nodes = data and data.data and data.data.search and data.data.search.nodes
+      if type(nodes) ~= "table" then
+        return fail(err or "invalid search response")
+      end
+      for _, item in ipairs(nodes) do
+        local repo = item.repository
+        if
+          not repo
+          or not repo.owner
+          or type(repo.owner.login) ~= "string"
+          or type(repo.name) ~= "string"
+          or repo.owner.login:lower() ~= state.target.owner:lower()
+          or repo.name:lower() ~= state.target.repo:lower()
+        then
+          return fail("search returned an issue from another repository")
+        end
+      end
+      complete_connections(client, state, nodes, function(items, failure)
+        request.apply(token, function()
+          if not items then
+            return fail(failure)
           end
-        end
-        local nodes = data and data.data and data.data.search and data.data.search.nodes
-        if type(nodes) ~= "table" then
-          return fail(err or "invalid search response")
-        end
-        for _, item in ipairs(nodes) do
-          local repo = item.repository
-          if
-            not repo
-            or not repo.owner
-            or type(repo.owner.login) ~= "string"
-            or type(repo.name) ~= "string"
-            or repo.owner.login:lower() ~= state.target.owner:lower()
-            or repo.name:lower() ~= state.target.repo:lower()
-          then
-            return fail("search returned an issue from another repository")
-          end
-        end
-        complete_connections(client, state, nodes, function(items, failure)
-          request.apply(token, function()
-            if not items then
-              return fail(failure)
-            end
-            state.items, state.condition, state.success = items, condition, true
-            render(buf, state)
-          end)
+          state.items, state.condition, state.success = items, condition, true
+          render(buf, state)
         end)
       end)
-    end
-  )
+    end, true)
+  end)
 end
 local function toggle(buf, delta)
   local state = states[buf]
@@ -193,12 +171,7 @@ local function preview(buf)
   if not item then
     return
   end
-  vim.cmd("vnew")
-  local preview_buf = vim.api.nvim_get_current_buf()
-  vim.bo[preview_buf].buftype = "nofile"
-  vim.bo[preview_buf].bufhidden = "wipe"
-  vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, vim.split(item.body or "", "\n", { plain = true }))
-  vim.bo[preview_buf].modifiable = false
+  require("github.core.view").preview(item.body or "")
 end
 function M.read(buf, target)
   local state = states[buf]
@@ -213,18 +186,21 @@ function M.read(buf, target)
       end,
     })
     require("github.features.issues.state").attach(buf)
+    require("github.core.navigation").configure(buf, "gh-issues")
     vim.bo[buf].buftype = "nofile"
     vim.bo[buf].swapfile = false
-    vim.keymap.set("n", "ghn", function()
+    require("github.core.navigation").map(buf, "ghn", "gh:issue:new", function()
       require("github.features.issues.create").open_from_list(buf)
-    end, { buffer = buf })
-    vim.keymap.set("n", "ghs", function()
-      vim.ui.input({ prompt = "Search issues: ", default = state.condition }, function(value)
+    end)
+    require("github.core.navigation").map(buf, "ghs", "gh:issue:search", function()
+      require("github.core.view").search(buf, state.condition, function(value)
         if value ~= nil then
           M.search(buf, value)
         end
+      end, function()
+        return state.condition
       end)
-    end, { buffer = buf })
+    end)
     local function edit(field)
       local item = state.items[vim.api.nvim_win_get_cursor(0)[1]]
       if not item then
@@ -251,38 +227,44 @@ function M.read(buf, target)
         editor.open_body(destination)
       end
     end
-    vim.keymap.set("n", "ght", function()
+    require("github.core.navigation").map(buf, "ght", "gh:issue:edit:title", function()
       edit("title")
-    end, { buffer = buf })
-    vim.keymap.set("n", "ghe", function()
+    end)
+    require("github.core.navigation").map(buf, "ghe", "gh:issue:edit", function()
       edit("body")
-    end, { buffer = buf })
-    vim.keymap.set("n", "gha", function()
+    end)
+    require("github.core.navigation").map(buf, "gha", "gh:issue:assignees", function()
       require("github.features.issues.attributes").open_from_list(buf, "assignees")
-    end, { buffer = buf })
-    vim.keymap.set("n", "ghl", function()
+    end)
+    require("github.core.navigation").map(buf, "ghl", "gh:issue:labels", function()
       require("github.features.issues.attributes").open_from_list(buf, "labels")
-    end, { buffer = buf })
-    vim.keymap.set("n", "ghm", function()
+    end)
+    require("github.core.navigation").map(buf, "ghm", "gh:issue:comments", function()
       require("github.features.comments.list").open_from_list(buf)
-    end, { buffer = buf })
-    vim.keymap.set("n", "ghy", function()
+    end)
+    require("github.core.navigation").map(buf, "ghy", "gh:issue:yank", function()
       require("github.features.links.copy").from_list(buf, "issue")
-    end, { buffer = buf })
-    vim.keymap.set("n", "<C-o>", function()
+    end)
+    require("github.core.navigation").map(buf, "<C-o>", "gh:issue:view", function()
       require("github.features.links.open").from_list(buf, "issue")
-    end, { buffer = buf })
-    vim.keymap.set("n", "K", function()
+    end)
+    require("github.core.navigation").map(buf, "K", "gh:issue:preview", function()
       preview(buf)
-    end, { buffer = buf })
-    vim.keymap.set("n", "<C-j>", function()
+    end)
+    require("github.core.navigation").map(buf, "<C-j>", "gh:issue:select:next", function()
       toggle(buf, 1)
-    end, { buffer = buf })
-    vim.keymap.set("n", "<C-k>", function()
+    end)
+    require("github.core.navigation").map(buf, "<C-k>", "gh:issue:select:prev", function()
       toggle(buf, -1)
-    end, { buffer = buf })
+    end)
   end
   M.search(buf, state.condition)
+end
+function M.clear_selection(buf)
+  if states[buf] and vim.api.nvim_buf_is_loaded(buf) then
+    states[buf].selected = {}
+    render(buf, states[buf])
+  end
 end
 function M.state(buf)
   return states[buf]

@@ -29,7 +29,7 @@ end
 describe("issue state changes", function()
   before_each(function()
     calls, callbacks, messages = {}, {}, {}
-    old_run, old_notify, old_input = require("github.core.process").run, vim.notify, vim.ui.input
+    old_run, old_notify, old_input = require("github.core.process").run, vim.notify, require("github.core.view").search
     require("github.core.process").run = function(argv, opts, cb)
       calls[#calls + 1] = { argv = argv, body = vim.json.decode(opts.stdin) }
       callbacks[#callbacks + 1] = cb
@@ -40,14 +40,31 @@ describe("issue state changes", function()
     vim.cmd("runtime plugin/github.lua")
   end)
   after_each(function()
-    require("github.core.process").run, vim.notify, vim.ui.input = old_run, old_notify, old_input
+    require("github.core.process").run, vim.notify, require("github.core.view").search = old_run, old_notify, old_input
     vim.cmd("silent! %bwipeout!")
     package.loaded["github.features.issues.list"] = nil
   end)
+  for _, action in ipairs({ "ghc", "gho" }) do
+    local keymap = action
+    it("shows progress for " .. action .. " and preserves later request progress", function()
+      vim.cmd("edit github://a/r/issues")
+      local buf = vim.api.nvim_get_current_buf()
+      search(1, { item(1) })
+      vim.cmd("normal " .. keymap)
+      assert.equals("Saving...", vim.b[buf].github_status)
+      require("github.features.issues.list").search(buf, "state:closed")
+      assert.equals("Loading...", vim.b[buf].github_status)
+      success(2)
+      assert.equals("Loading...", vim.b[buf].github_status)
+      search(#calls, { item(2) })
+      assert.is_nil(vim.b[buf].github_status)
+      assert.same("  #2 Title 2 OPEN  ()  0", vim.api.nvim_get_current_line())
+    end)
+  end
   it("changes the cursor issue using ghc and gho and refreshes the last successful condition", function()
     vim.cmd("edit github://a/r/issues")
     search(1, { item(1), item(2) })
-    vim.ui.input = function(_, cb)
+    require("github.core.view").search = function(_, _, cb)
       cb("state:closed")
     end
     vim.cmd("normal ghs")
@@ -81,10 +98,7 @@ describe("issue state changes", function()
     assert.equals("GitHub a/r #2: failed: GraphQL errors returned", messages[2])
     assert.equals(4, #calls)
     assert.equals("repo:a/r type:issue state:open", calls[4].body.variables.query)
-    assert.equals(
-      "#1 [OPEN] Title 1 | assignees:  | labels:  | comments: 0",
-      vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
-    )
+    assert.equals("  #1 Title 1 OPEN  ()  0", vim.api.nvim_buf_get_lines(0, 0, 1, false)[1])
     callbacks[4]({ code = 1, stdout = "" })
     assert.equals("GitHub a/r: GitHub request failed (exit 1)", messages[3])
   end)

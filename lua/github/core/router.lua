@@ -21,6 +21,9 @@ local function dispatch(event, operation)
     vim.notify("GitHub feature unavailable: " .. target.kind, vim.log.levels.ERROR)
     return
   end
+  if operation == "read" then
+    require("github.core.navigation").configure(event.buf)
+  end
   feature[operation](event.buf, target)
 end
 function M.setup()

@@ -1,7 +1,6 @@
 local gh = require("github.core.gh")
 local request = require("github.core.request")
 local buffer = require("github.core.buffer")
-local uri = require("github.core.uri")
 local M, states = {}, {}
 
 local queries = {
@@ -50,7 +49,7 @@ local function collect(client, state, token, candidate, done)
       vars.number = nil
     end
     client.graphql(state.target, queries[key], vars, function(data, err)
-      if not request.apply(token, function() end) then
+      if not request.apply(token, function() end, true) then
         return
       end
       local payload = type(data) == "table" and data.data
@@ -93,6 +92,7 @@ function M.read(buf, target)
   end
   local state = { target = target, kind = target.kind == "issue_assignees" and "assignees" or "labels", ready = false }
   states[buf] = state
+  require("github.core.navigation").configure(buf, state.kind == "assignees" and "gh-issues-assignees" or nil)
   vim.bo[buf].buftype = "acwrite"
   vim.bo[buf].swapfile = false
   vim.bo[buf].modifiable = false
@@ -110,6 +110,10 @@ function M.read(buf, target)
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
       vim.bo[buf].modified = false
       state.ready, state.id = true, id
+      require("github.core.navigation").event(
+        buf,
+        state.kind == "assignees" and "gh_open_issue_assignees" or "gh_open_issue_labels"
+      )
     end)
   end)
 end
@@ -119,6 +123,9 @@ function M.write(buf)
     if state then
       notify(state, "Cannot save: attributes not fully loaded")
     end
+    return
+  end
+  if not vim.bo[buf].modified then
     return
   end
   local snapshot, err = buffer.begin_save(buf)
@@ -136,12 +143,19 @@ function M.write(buf)
   })
   local names, seen = {}, {}
   for _, line in ipairs(snapshot.lines) do
-    if line ~= "" and not seen[line] then
-      seen[line] = true
+    local key = state.kind == "assignees" and line:lower() or line
+    if line ~= "" and not seen[key] then
+      seen[key] = true
       names[#names + 1] = line
     end
   end
-  local token, client = request.begin(buf), gh.new()
+  if state.kind == "assignees" and #names > 10 then
+    buffer.finish_save(snapshot, false)
+    state.save = nil
+    pcall(vim.api.nvim_del_autocmd, unload)
+    return notify(state, "cannot assign more than 10 users")
+  end
+  local token, client = request.begin(buf, "Saving..."), gh.new()
   local function finished(success, message)
     request.apply(token, function()
       local unchanged = vim.api.nvim_buf_get_changedtick(buf) == snapshot.tick
@@ -179,13 +193,15 @@ function M.write(buf)
     local key = state.kind == "assignees" and "login" or "name"
     local by_name, ids = {}, {}
     for _, item in ipairs(nodes) do
-      by_name[item[key]] = item.id
+      local name = state.kind == "assignees" and item[key]:lower() or item[key]
+      by_name[name] = item.id
     end
     for _, name in ipairs(names) do
-      if not by_name[name] then
+      local lookup = state.kind == "assignees" and name:lower() or name
+      if not by_name[lookup] then
         return finished(false, "Invalid or unavailable " .. state.kind .. ": " .. name)
       end
-      ids[#ids + 1] = by_name[name]
+      ids[#ids + 1] = by_name[lookup]
     end
     update(ids)
   end)
@@ -198,6 +214,6 @@ function M.open_from_list(buf, kind)
   end
   local target =
     { kind = "issue_" .. kind, owner = state.target.owner, repo = state.target.repo, issue_number = item.number }
-  vim.cmd("edit " .. vim.fn.fnameescape(uri.format(target)))
+  require("github.core.navigation").open(target)
 end
 return M

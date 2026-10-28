@@ -72,12 +72,13 @@ function M.read(buf, target)
           vim.log.levels.ERROR
         )
       end
-      local choices = { { name = "Blank", body = "" } }
+      local choices = {}
       for _, item in ipairs(templates) do
         if type(item) == "table" and type(item.name) == "string" and type(item.body) == "string" then
           choices[#choices + 1] = item
         end
       end
+      choices[#choices + 1] = { name = "Blank", body = "" }
       local tick = vim.api.nvim_buf_get_changedtick(buf)
       vim.ui.select(choices, {
         prompt = "Choose issue template",
@@ -92,9 +93,16 @@ function M.read(buf, target)
           if vim.bo[buf].modified or vim.api.nvim_buf_get_changedtick(buf) ~= tick then
             return notify(state, "unsaved draft retained", vim.log.levels.WARN)
           end
-          vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(item.body, "\n", { plain = true }))
+          vim.api.nvim_buf_set_lines(
+            buf,
+            0,
+            -1,
+            false,
+            vim.split((item.body:gsub("\r\n", "\n")), "\n", { plain = true })
+          )
           vim.bo[buf].modified = false
           state.ready = true
+          require("github.core.navigation").event(buf, "gh_open_issue")
         end)
       end)
     end)
@@ -200,10 +208,10 @@ function M.open_from_list(buf)
   end
   local target = vim.deepcopy(state.target)
   target.kind = "issue_create"
-  vim.cmd("edit " .. vim.fn.fnameescape(uri.format(target)))
-  local draft = vim.api.nvim_get_current_buf()
-  if states[draft] then
-    states[draft].list = buf
-  end
+  require("github.core.navigation").open(target, function(draft)
+    if states[draft] then
+      states[draft].list = buf
+    end
+  end, "new")
 end
 return M

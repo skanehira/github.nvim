@@ -1,7 +1,7 @@
 local M = {}
 local generations = {}
 local monitored = {}
-function M.begin(buf)
+function M.begin(buf, label)
   if not monitored[buf] then
     monitored[buf] = true
     vim.api.nvim_create_autocmd("BufUnload", {
@@ -14,9 +14,10 @@ function M.begin(buf)
     })
   end
   generations[buf] = (generations[buf] or 0) + 1
-  return { buf = buf, generation = generations[buf] }
+  label = label or "Loading..."
+  return { buf = buf, generation = generations[buf], progress = require("github.core.progress").start(buf, label) }
 end
-function M.apply(request, callback)
+function M.apply(request, callback, keep_progress)
   if
     not vim.api.nvim_buf_is_valid(request.buf)
     or not vim.api.nvim_buf_is_loaded(request.buf)
@@ -24,7 +25,13 @@ function M.apply(request, callback)
   then
     return false
   end
+  if not keep_progress then
+    require("github.core.progress").finish(request.progress)
+  end
   callback(request.buf)
   return true
+end
+function M.finish(request)
+  require("github.core.progress").finish(request.progress)
 end
 return M

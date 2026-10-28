@@ -1,3 +1,4 @@
+local old_choose
 local calls, pending, notices, old_run, old_notify
 local function comment(id, body, user)
   return {
@@ -32,6 +33,10 @@ local function issue()
 end
 describe("comment list", function()
   before_each(function()
+    old_choose = require("github.core.navigation").choose
+    require("github.core.navigation").choose = function(callback)
+      callback("edit")
+    end
     calls, pending, notices = {}, {}, {}
     old_run = require("github.core.process").run
     old_notify = vim.notify
@@ -45,6 +50,7 @@ describe("comment list", function()
     vim.cmd("runtime plugin/github.lua")
   end)
   after_each(function()
+    require("github.core.navigation").choose = old_choose
     require("github.core.process").run = old_run
     vim.notify = old_notify
     vim.cmd("silent! %bwipeout!")
@@ -65,13 +71,38 @@ describe("comment list", function()
     respond(1, items)
     local got = lines()
     assert.equals(100, #got)
-    assert.equals("alice: first", got[1])
-    assert.equals("[deleted]: ", got[2])
-    assert.equals("u100: body 100", got[100])
+    assert.equals("  @alice    first", got[1])
+    assert.equals("  [deleted] ", got[2])
+    assert.equals("  @u100     body 100", got[100])
     vim.cmd("normal K")
-    assert.same({ "first", "second" }, lines())
+    assert.same({ "first", "second" }, lines(vim.fn.bufnr("github:preview")))
     assert.equals(2, #vim.api.nvim_tabpage_list_wins(0))
     assert.equals(1, #calls)
+  end)
+  it("highlights comment authors and selected rows without stale ranges", function()
+    vim.cmd("edit github://a/r/issues/7/comments")
+    respond(1, { comment(1, "日本語", "alice"), comment(2, "hello", "bob") })
+    local function highlights()
+      local result, buf = {}, vim.api.nvim_get_current_buf()
+      for _, mark in
+        ipairs(vim.api.nvim_buf_get_extmarks(buf, vim.api.nvim_get_namespaces().github, 0, -1, { details = true }))
+      do
+        local row, col, detail = mark[2], mark[3], mark[4]
+        result[#result + 1] =
+          { row, vim.api.nvim_buf_get_text(buf, row, col, row, detail.end_col, {})[1], detail.hl_group }
+      end
+      return result
+    end
+    assert.same({ { 0, "@alice", "gh_issue_comment_user" }, { 1, "@bob", "gh_issue_comment_user" } }, highlights())
+    key("<C-j>")
+    assert.same(
+      { { 0, "*", "gh_select" }, { 0, "@alice", "gh_issue_comment_user" }, { 1, "@bob", "gh_issue_comment_user" } },
+      highlights()
+    )
+    vim.cmd("edit!")
+    respond(2, { comment(3, "deleted", false) })
+    assert.same({ "  [deleted] deleted" }, lines())
+    assert.same({}, highlights())
   end)
   it("opens comments for the current issue using ghm", function()
     vim.cmd("edit github://a/r/issues")
@@ -80,17 +111,17 @@ describe("comment list", function()
     assert.equals("github://a/r/issues/7/comments", vim.api.nvim_buf_get_name(0))
     assert.equals("repos/a/r/issues/7/comments?per_page=100", calls[2].argv[7])
     respond(2, { comment(2, "hello") })
-    assert.same({ "alice: hello" }, lines())
+    assert.same({ "  @alice hello" }, lines())
   end)
   it("clears selection on refresh, shows empty results and keeps previous results on failure", function()
     vim.cmd("edit github://a/r/issues/7/comments")
     respond(1, { comment(1, "one"), comment(2, "two") })
     key("<C-j>")
-    assert.same({ "* alice: one", "alice: two" }, lines())
+    assert.same({ "* @alice one", "  @alice two" }, lines())
     vim.cmd("edit!")
-    assert.same({ "alice: one", "alice: two" }, lines())
+    assert.same({ "  @alice one", "  @alice two" }, lines())
     pending[2]({ code = 1, stdout = "" })
-    assert.same({ "alice: one", "alice: two" }, lines())
+    assert.same({ "  @alice one", "  @alice two" }, lines())
     assert.same({ "GitHub a/r: GitHub request failed (exit 1)" }, notices)
     vim.cmd("edit!")
     respond(3, {})
@@ -104,11 +135,11 @@ describe("comment list", function()
     respond(1, { comment(1, "one"), comment(2, "\nsecond", false) })
     vim.api.nvim_win_set_cursor(0, { 2, 0 })
     key("<C-k>")
-    assert.same({ "alice: one", "* [deleted]: " }, lines())
+    assert.same({ "  @alice    one", "* [deleted] " }, lines())
     assert.equals(1, vim.api.nvim_win_get_cursor(0)[1])
     vim.api.nvim_win_set_cursor(0, { 2, 0 })
     vim.cmd("normal K")
-    assert.same({ "", "second" }, lines())
+    assert.same({ "", "second" }, lines(vim.fn.bufnr("github:preview")))
     assert.equals(2, #vim.api.nvim_tabpage_list_wins(0))
   end)
   it("reports initial failure while retaining a failure display", function()
@@ -125,7 +156,7 @@ describe("comment list", function()
     vim.cmd("edit!")
     respond(3, { comment(2, "new") })
     respond(2, { comment(3, "stale") })
-    assert.same({ "alice: new" }, lines(buf))
+    assert.same({ "  @alice new" }, lines(buf))
     vim.cmd("edit!")
     vim.cmd("bwipeout!")
     vim.cmd("enew")

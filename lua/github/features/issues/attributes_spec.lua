@@ -1,3 +1,4 @@
+local old_choose
 local old_run, old_notify, calls, pending, notices
 local function connection(nodes, more, cursor)
   return { nodes = nodes, pageInfo = { hasNextPage = more or false, endCursor = cursor or vim.NIL } }
@@ -14,6 +15,10 @@ end
 
 describe("issue attributes", function()
   before_each(function()
+    old_choose = require("github.core.navigation").choose
+    require("github.core.navigation").choose = function(callback)
+      callback("edit")
+    end
     calls, pending, notices = {}, {}, {}
     old_run, old_notify = require("github.core.process").run, vim.notify
     require("github.core.process").run = function(_, opts, cb)
@@ -26,6 +31,7 @@ describe("issue attributes", function()
     vim.cmd("runtime plugin/github.lua")
   end)
   after_each(function()
+    require("github.core.navigation").choose = old_choose
     require("github.core.process").run, vim.notify = old_run, old_notify
     vim.cmd("silent! %bwipeout!")
     package.loaded["github.features.issues.attributes"] = nil
