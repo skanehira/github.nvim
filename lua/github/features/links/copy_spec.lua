@@ -68,7 +68,7 @@ describe("copying URLs from lists", function()
       vim.api.nvim_win_set_cursor(0, { 2, 0 })
       key("ghy")
       assert.same({ prefix .. "2" }, copied)
-      assert.matches("1", notices[1][1])
+      assert.equals("Clipboard write requested for 1 URL(s); result unconfirmed", notices[1][1])
       assert.equals(1, #pending)
     end)
     it("copies selected " .. kind .. " URLs in list order without a final newline", function()
@@ -79,7 +79,7 @@ describe("copying URLs from lists", function()
       key("<C-j>")
       key("ghy")
       assert.same({ prefix .. "1\n" .. prefix .. "3" }, copied)
-      assert.matches("2", notices[1][1])
+      assert.equals("Clipboard write requested for 2 URL(s); result unconfirmed", notices[1][1])
     end)
     it("preserves the clipboard when the " .. kind .. " list is empty", function()
       setup_list(kind, {})
@@ -103,7 +103,7 @@ describe("copying URLs from lists", function()
     local url = "https://github.com/a/r/issues/7"
     require("github.features.links.copy").copy({ url })
     assert.same({ url }, copied)
-    assert.matches("1", notices[1][1])
+    assert.equals("Clipboard write requested for 1 URL(s); result unconfirmed", notices[1][1])
     assert.same({}, pending)
   end)
   it("does not modify the clipboard if a selected target lacks a URL", function()
@@ -115,5 +115,48 @@ describe("copying URLs from lists", function()
     key("ghy")
     assert.same({}, copied)
     assert.equals(vim.log.levels.ERROR, notices[1][2])
+  end)
+end)
+
+describe("clipboard provider integration", function()
+  it("reports an unavailable clipboard provider without a successful notification", function()
+    local copy = require("github.features.links.copy")
+    local old_available, saved_notify = copy.available, vim.notify
+    local messages = {}
+    copy.available = function()
+      return false
+    end
+    vim.notify = function(message, level)
+      messages[#messages + 1] = { message, level }
+    end
+    copy.copy({ "https://github.com/a/r/issues/1" })
+    assert.same({ { "Clipboard write failed: clipboard provider unavailable", vim.log.levels.ERROR } }, messages)
+    copy.available, vim.notify = old_available, saved_notify
+  end)
+  it("requests the + register through a fake Neovim provider and reports unconfirmed completion", function()
+    vim.cmd([[
+      function! GithubTestCopy(lines, regtype) abort
+        let g:github_test_clipboard = [a:lines, a:regtype]
+      endfunction
+      function! GithubTestPaste() abort
+        return [['old'], 'v']
+      endfunction
+      let g:clipboard = {'name': 'github-test',
+            \ 'copy': {'+': function('GithubTestCopy'), '*': function('GithubTestCopy')},
+            \ 'paste': {'+': function('GithubTestPaste'), '*': function('GithubTestPaste')},
+            \ 'cache_enabled': 0}
+    ]])
+    local saved_notify = vim.notify
+    local messages = {}
+    vim.notify = function(message, level)
+      messages[#messages + 1] = { message, level }
+    end
+    require("github.features.links.copy").copy({ "https://github.com/a/r/issues/1", "https://github.com/a/r/issues/2" })
+    assert.same(
+      { { "https://github.com/a/r/issues/1", "https://github.com/a/r/issues/2" }, "v" },
+      vim.g.github_test_clipboard
+    )
+    assert.same({ { "Clipboard write requested for 2 URL(s); result unconfirmed", vim.log.levels.INFO } }, messages)
+    vim.notify = saved_notify
   end)
 end)
