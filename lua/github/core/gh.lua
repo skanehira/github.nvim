@@ -9,9 +9,16 @@ function M.new(run)
         callback(nil, { target = name, reason = reason })
       end
       if not result then
+        if vim.fn.executable("gh") == 0 then
+          return fail("gh is not installed; install GitHub CLI (https://cli.github.com/)")
+        end
         return fail("GitHub process failed to start")
       end
       if result.code ~= 0 then
+        local stderr = result.stderr or ""
+        if result.code == 4 or stderr:find("HTTP 401", 1, true) or stderr:find("gh auth login", 1, true) then
+          return fail("gh is not authenticated; run gh auth login --hostname " .. target.host)
+        end
         return fail("GitHub request failed (exit " .. tostring(result.code) .. ")")
       end
       local ok, decoded = pcall(vim.json.decode, result.stdout)

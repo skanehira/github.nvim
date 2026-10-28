@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><title>Issue 26 保留レビュー項目</title></head><body>
+<h1>Issue 26: 導入と初期化を実装する</h1>
+<label data-severity="medium" data-category="code-quality"><input type="checkbox"> medium / code-quality — lua/github/health.lua:11: 導入診断と gh 不在判定で外部実行・実行ファイル探索を直接呼び、注入可能な外界境界を通していない。<br>根拠: health.lua と gh.lua が vim.fn.executable や vim.system を直接呼び、テストは PATH 変更と実ファイル作成を要する。<br>修正案: health の実行器と gh 有無判定を注入可能な境界にまとめ、診断と起動失敗の両経路で使う。</label>
+</body></html>
