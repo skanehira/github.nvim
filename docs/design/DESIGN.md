@@ -18,9 +18,19 @@ Neovim Luaを使用し、最低版は実測した0.10.4とする。GitHub APIは
 
 ## 開発・検証コマンド
 
-本リポジトリはscaffold前である。`make test`、`make lint`、`make check`、対象ファイルのテスト方法と、GitHubを変更しないheadless Neovimの結合テスト方法は、基盤セットアップissueの完了後に実測して確定する。それまでは存在するコマンドとして扱わない。対応版Neovim、git、gh、stylua、Luaのlintとテストランナーを前提とし、テスト依存はruntime依存にしない。実装とテストは機能ごとに同じディレクトリへ置く。
+前提はNeovim 0.10.4以上、git、gh、make、stylua、luacheck。テストランナーはplenary.nvimのコミット`74b06c6c75e4eeb3108ec01852001636d85a932b`で、プラグインのruntime依存には含めない。チェックアウトまたはworktreeごとにネットワーク接続のある環境で`make setup`を実行し、`.deps/plenary.nvim`に取得する。`.worktreeinclude`に複製対象はなく、`.deps/`は各worktreeで個別に用意する。
 
-worktreeごとに独立した一時ディレクトリとNeovimのconfig/data/state/cacheを使う。ローカルfake gh・fakeブラウザ・fakeクリップボードは各テストで生成し、テストはGitHub書込みや実クリップボードを使わない。固定ポートは使わず、必要な場合はOS割当ポートを使う。チェックアウト後の依存セットアップ、`.worktreeinclude`、`.gitignore`のworktree除外も基盤セットアップissueで作成・実測する。
+| コマンド | 用途 |
+| --- | --- |
+| `make setup` | テスト依存を取得し指定コミットへ切り替える。 |
+| `make test` | `lua/`配下の`*_spec.lua`を全てheadless Neovimで実行する。 |
+| `make test-file FILE=lua/github/test_environment_spec.lua` | 指定したテストファイルだけを実行する。 |
+| `make lint` | Luaファイルのluacheckを実行する。 |
+| `make check` | StyLuaによるフォーマット検査を実行する。 |
+
+実装とテストは機能ごとに同じディレクトリへ置く。テストの各実行は一意の一時ディレクトリを作り、Neovimのconfig/data/state/cacheを分離して終了時に削除する。ローカルfake gh・fakeブラウザ・fakeクリップボードは各テストで生成し、テストはGitHub書込みや実クリップボードを使わない。固定ポートは使わず、必要な場合はOS割当ポートを使う。`.claude/worktrees/`はgitの追跡対象外とする。
+
+上記セットアップと5コマンドは、独立したディレクトリで実行して確認済み。テストはNeovim 0.10.4と0.13 nightlyで実行済み。実際のNeovimバッファへのUTF-8書込み、標準ディレクトリの分離、意図的な失敗が全件・単一ファイル双方で非0になることを確認した。
 
 ## GitHub API一覧
 
@@ -64,6 +74,7 @@ GraphQLはJSON `{query, variables}`を`--input -`で渡し、RESTもメソッド
 - GitHub検索結果は最大30件、コメント一覧は最大100件。画面のページ送りは初期版対象外。属性編集に必要な内部ページングは実施する。
 - HTTPSのBufAdd正規化はnetrwと既存の未保存バッファで実測済み。他pluginのBufAdd順序、複数窓、全URI形式はPoC未検証であり、実装時の統合テストで確かめる。対象外URLと他pluginの入力を破壊しない。
 - Neovim 0.10.0〜0.10.3は未検証。最低版を0.10.4とする。
+- plenaryのテスト子Neovimは`-u NONE`を継承しないため、実行環境から`VIMINIT`と`EXINIT`を除いて利用者の初期化を避ける。
 
 ## 未解決の論点
 
