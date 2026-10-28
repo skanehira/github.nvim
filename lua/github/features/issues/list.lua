@@ -221,6 +221,38 @@ function M.read(buf, target)
         end
       end)
     end, { buffer = buf })
+    local function edit(field)
+      local item = state.items[vim.api.nvim_win_get_cursor(0)[1]]
+      if not item then
+        return
+      end
+      if field == "body" and next(state.selected) then
+        vim.notify(
+          "GitHub " .. target.owner .. "/" .. target.repo .. ": clear the selection before editing the body",
+          vim.log.levels.WARN
+        )
+        return
+      end
+      local destination = {
+        kind = "issue_edit",
+        host = target.host,
+        owner = target.owner,
+        repo = target.repo,
+        issue_number = item.number,
+      }
+      local editor = require("github.features.issues.edit")
+      if field == "title" then
+        editor.open_title(destination)
+      else
+        editor.open_body(destination)
+      end
+    end
+    vim.keymap.set("n", "ght", function()
+      edit("title")
+    end, { buffer = buf })
+    vim.keymap.set("n", "ghe", function()
+      edit("body")
+    end, { buffer = buf })
     vim.keymap.set("n", "K", function()
       preview(buf)
     end, { buffer = buf })
