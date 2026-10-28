@@ -5,8 +5,12 @@ function M.new(run)
   local function call(target, argv, stdin, graphql, callback)
     local name = target.host .. "/" .. target.owner .. "/" .. target.repo
     run(argv, { stdin = stdin, cwd = target.cwd }, function(result)
-      local function fail(reason)
-        callback(nil, { target = name, reason = reason })
+      local function fail(reason, kind)
+        local failure = { target = name, reason = reason }
+        if argv[5] == "--method" and argv[6] == "PATCH" then
+          failure.kind = kind
+        end
+        callback(nil, failure)
       end
       if not result then
         if vim.fn.executable("gh") == 0 then
@@ -17,9 +21,11 @@ function M.new(run)
       if result.code ~= 0 then
         local stderr = result.stderr or ""
         if result.code == 4 or stderr:find("HTTP 401", 1, true) or stderr:find("gh auth login", 1, true) then
-          return fail("gh is not authenticated; run gh auth login --hostname " .. target.host)
+          return fail("gh is not authenticated; run gh auth login --hostname " .. target.host, "rejected")
         end
-        return fail("GitHub request failed (exit " .. tostring(result.code) .. ")")
+        local status = tonumber(stderr:match("HTTP (%d%d%d)"))
+        local kind = status and status >= 400 and status < 500 and "rejected" or "unknown"
+        return fail("GitHub request failed (exit " .. tostring(result.code) .. ")", kind)
       end
       local ok, decoded = pcall(vim.json.decode, result.stdout)
       if not ok or type(decoded) ~= "table" then
