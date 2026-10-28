@@ -74,6 +74,7 @@ GraphQLはJSON `{query, variables}`を`--input -`で渡し、RESTもメソッド
 - GitHub検索結果は最大30件、コメント一覧は最大100件。画面のページ送りは初期版対象外。属性編集に必要な内部ページングは実施する。
 - HTTPSのBufAdd正規化はnetrwと既存の未保存バッファで実測済み。他pluginのBufAdd順序、複数窓、全URI形式はPoC未検証であり、実装時の統合テストで確かめる。対象外URLと他pluginの入力を破壊しない。
 - Neovim 0.10.0〜0.10.3は未検証。最低版を0.10.4とする。
+- 実測したNeovim 0.13 nightlyの同梱netrwにはHTTPSハンドラがない。github.nvimは対象外のURLを処理せず、既存のハンドラがある場合は維持する。
 - plenaryのテスト子Neovimは`-u NONE`を継承しないため、`VIMINIT`と`EXINIT`を除き、`XDG_CONFIG_DIRS`と`XDG_DATA_DIRS`を一時ディレクトリに指定して利用者の設定・ランタイム探索を分離する。
 
 ## 未解決の論点

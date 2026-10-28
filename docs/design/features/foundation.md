@@ -31,6 +31,8 @@ GitHub/Gitの外部コマンド実行、リポジトリ文脈、URIの解析・�
 | 要求世代・buffer所有 | 状態/UI補助 | `lua/github/core/request.lua`, `lua/github/core/buffer.lua` |
 | テスト・lint・format・CIの入口 | 開発基盤 | `Makefile`, `scripts/`, `.github/workflows/`, `.gitignore`, `.worktreeinclude` |
 
+共通モジュールの呼出し方は次のとおり。`process.run(argv, opts, callback)`は`callback(result, error)`、`gh.new(run)`は`graphql(target, query, variables, callback)`と`rest(target, method, endpoint, body, callback)`を返し、成功時はJSON、失敗時は`{target, reason}`を返す。`gh.paginate(fetch, callback)`は各ページの`{items, pageInfo}`を終端まで集める。`repo.explicit(owner, repo)`は明示対象を生成し、`repo.resolve(cwd, run, callback)`はoriginとローカルpathを調べる。`uri.parse`と`uri.format`は対象と正規URIを相互変換する。`request.begin(buf)`と`request.apply(token, callback)`は画面と要求世代を照合する。`buffer.begin_save(buf)`は本文行とchangedtickを固定し、`buffer.finish_save(snapshot, success)`は後続編集を保護する。routerは機能の`read(buf, target)`または`write(buf, target)`を操作時に呼ぶ。
+
 テストは各Luaファイルに`*_spec.lua`を同居させる。基盤セットアップissueで実際のセットアップ・`make test`・`make test-file FILE=...`・`make lint`・`make check`を実行し、DESIGN.md「開発・検証コマンド」を実測結果で確定する。
 
 ## エッジケースの決定

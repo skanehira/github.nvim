@@ -1,0 +1,79 @@
+local M = {}
+
+function M.new(run)
+  run = run or require("github.core.process").run
+  local function call(target, argv, stdin, graphql, callback)
+    local name = target.host .. "/" .. target.owner .. "/" .. target.repo
+    run(argv, { stdin = stdin, cwd = target.cwd }, function(result)
+      local function fail(reason)
+        callback(nil, { target = name, reason = reason })
+      end
+      if not result then
+        return fail("GitHub process failed to start")
+      end
+      if result.code ~= 0 then
+        return fail("GitHub request failed (exit " .. tostring(result.code) .. ")")
+      end
+      local ok, decoded = pcall(vim.json.decode, result.stdout)
+      if not ok or type(decoded) ~= "table" then
+        return fail("invalid JSON response")
+      end
+      if graphql and decoded.errors and decoded.errors ~= vim.NIL and #decoded.errors > 0 then
+        return fail("GraphQL errors returned")
+      end
+      callback(decoded)
+    end)
+  end
+  return {
+    graphql = function(target, query, variables, callback)
+      call(
+        target,
+        { "gh", "api", "graphql", "--hostname", target.host, "--input", "-" },
+        vim.json.encode({ query = query, variables = variables }),
+        true,
+        callback
+      )
+    end,
+    rest = function(target, method, endpoint, body, callback)
+      local args = { "gh", "api", "--hostname", target.host, "--method", method, endpoint }
+      if body ~= nil then
+        vim.list_extend(args, { "--input", "-" })
+      end
+      call(target, args, body ~= nil and vim.json.encode(body) or nil, false, callback)
+    end,
+  }
+end
+
+function M.paginate(fetch, callback)
+  local seen, items = {}, {}
+  local function next_page(cursor)
+    fetch(cursor, function(page, err)
+      if not page then
+        return callback(nil, err)
+      end
+      if type(page) ~= "table" or type(page.items) ~= "table" or not vim.islist(page.items) then
+        return callback(nil, "invalid pagination items")
+      end
+      if type(page.pageInfo) ~= "table" or type(page.pageInfo.hasNextPage) ~= "boolean" then
+        return callback(nil, "invalid pagination pageInfo")
+      end
+      vim.list_extend(items, page.items)
+      local info = page.pageInfo
+      if not info.hasNextPage then
+        return callback(items)
+      end
+      local next_cursor = info.endCursor
+      if type(next_cursor) ~= "string" or next_cursor == "" then
+        return callback(nil, "pagination cursor missing")
+      end
+      if seen[next_cursor] then
+        return callback(nil, "pagination cursor repeated")
+      end
+      seen[next_cursor] = true
+      next_page(next_cursor)
+    end)
+  end
+  next_page(nil)
+end
+
+return M
