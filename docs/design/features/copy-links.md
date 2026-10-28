@@ -13,7 +13,7 @@ Issue・コメント一覧の`ghy`で選択中の行をコピーする。`<C-j>`
 
 ## API
 
-GitHub APIは呼ばず、クリップボードの書込みアダプタへ完全な文字列を渡す。provider不在など検知できる失敗は理由を案内する。Neovimの`setreg`はproviderの失敗を確実に返さないため、完了を確認できない場合は成功と断定せず結果未確認と案内する。共通外界境界はDESIGN.md「横断規約」参照。
+GitHub APIは呼ばず、クリップボードの書込みアダプタへ完全な文字列を渡す。provider不在など検知できる失敗は理由を案内する。Neovimの`setreg`はproviderの失敗を確実に返さないため、完了を確認できない場合は成功と断定せず結果未確認と案内する。作成後のURLは`require("github.features.links.copy").copy({url})`に渡す。共通外界境界はDESIGN.md「横断規約」参照。
 
 ## 実装の配置
 
