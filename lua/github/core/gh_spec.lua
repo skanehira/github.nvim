@@ -93,6 +93,25 @@ describe("REST and pagination", function()
 end)
 
 describe("pagination response validation", function()
+  it("rejects invalid cursors before fetching an available final page", function()
+    for _, invalid_cursor in ipairs({ "", 123 }) do
+      local calls, value, failure = 0
+      require("github.core.gh").paginate(function(_, cb)
+        calls = calls + 1
+        if calls == 1 then
+          cb({ items = { "partial" }, pageInfo = { hasNextPage = true, endCursor = invalid_cursor } })
+        else
+          cb({ items = { "final" }, pageInfo = { hasNextPage = false } })
+        end
+      end, function(result, err)
+        value, failure = result, err
+      end)
+      assert.equals(1, calls)
+      assert.is_nil(value)
+      assert.equals("pagination cursor missing", failure)
+    end
+  end)
+
   it("rejects incomplete and malformed pages without exposing partial results", function()
     local invalid = {
       {},
