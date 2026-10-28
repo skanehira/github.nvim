@@ -103,7 +103,7 @@ GraphQL `search(first:30,type:ISSUE,query:...)`で`repo:<owner>/<repo> type:issu
 | Issueの一覧・検索・プレビューの状態・操作・表示 | 機能 | `lua/github/features/issues/list.lua` |
 | Issueの一覧・検索・プレビューの振る舞いの検証 | テスト | `lua/github/features/issues/list_spec.lua` |
 
-共通URI・プロセス・repo文脈の実装はfoundation設計に属し、操作固有コードは本機能が所有する。実行器・時刻・外界は注入する。各ファイルは実装時に作成する計画であり、現時点では存在しない。
+共通URI・プロセス・repo文脈の実装はfoundation設計に属し、操作固有コードは本機能が所有する。実行器・時刻・外界は注入する。後続機能は `require("github.features.issues.list").state(buf)` で対象・検索条件・表示行に対応した `items` と行番号をキーとする `selected` を参照できる。Issueのnode IDは各項目の `id` に保持する。状態変更時のID欠落の個別報告は状態変更機能が担う。
 
 ## エッジケースの決定
 
