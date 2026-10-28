@@ -1,0 +1,518 @@
+*github.txt*  GitHub Issues and pull request lists in Neovim
+
+Type: User manual
+Author: skanehira
+License: MIT (see LICENSE)
+
+==============================================================================
+CONTENTS                                                   *github-contents*
+
+    Introduction .......................................... |github-introduction|
+    Setup ................................................. |github-setup|
+    Issue workflow ........................................ |github-workflow|
+    Buffers ............................................... |github-buffers|
+    Pull request list ..................................... |github-buffer-pull-list|
+    Key mappings .......................................... |github-key-mappings|
+    Commands .............................................. |github-commands|
+    Highlights and events ................................. |github-customization|
+    Limits ................................................ |github-limits|
+    FAQ ................................................... |github-faq|
+
+==============================================================================
+INTRODUCTION                          *github* *github.nvim* *github-introduction*
+
+github.nvim is a Lua port of denops-gh.vim for Neovim. It operates on GitHub
+Issues, pull request lists, and comments in virtual buffers and uses the GitHub CLI for all GitHub
+API requests and authentication.
+
+Repository: https://github.com/skanehira/github.nvim
+Original:   https://github.com/skanehira/denops-gh.vim
+
+Public URI names use github://. Existing gh Plug mapping names are retained
+for custom mappings; see |github-key-mappings|. Completion is outside the
+current scope. The supported commands and buffer URIs are documented below;
+TODO interfaces in the original plugin are not advertised as implemented.
+
+==============================================================================
+SETUP                                                         *github-setup*
+
+Requires Neovim 0.10.4 or later, Git, and the GitHub CLI (gh). Authenticate gh
+for github.com before operating on GitHub:
+>
+    gh auth login --hostname github.com
+<
+With lazy.nvim:
+>lua
+    {
+      "skanehira/github.nvim",
+      lazy = false,
+      opts = {},
+    }
+<
+The plugin also works without a plugin manager when its directory is on
+'runtimepath' and its plugin files are loaded. Initialization does not invoke
+gh or access GitHub. The optional Lua setup accepts nil or an empty table:
+>lua
+    require("github").setup()
+<
+No configuration keys are supported in this release. Run |:checkhealth| with
+`github` to check the gh executable and gh authentication:
+>
+    :checkhealth github
+<
+Manual loading for a temporary session:
+>
+    nvim -u NONE \
+      --cmd 'set runtimepath^=/absolute/path/to/github.nvim' \
+      -c 'runtime plugin/github.lua' \
+      -c 'runtime plugin/github_related_pr.lua' \
+      -c 'GitHub issues owner/repo'
+<
+Plugin managers normally generate help tags. For a manual checkout, run:
+>
+    :helptags /absolute/path/to/github.nvim/doc
+    :help github
+<
+==============================================================================
+ISSUE WORKFLOW                                             *github-workflow*
+
+1. Open the current checkout's Issues, or specify a repository:
+>
+    :GitHub issues
+    :GitHub issues owner/repo
+<
+2. Use `ghs` to search. The one-line search buffer contains the last successful
+   condition. Replace `state:open` with `state:closed` to see closed Issues.
+   Enter applies the condition; q in Normal mode or CTRL-C cancels. Empty or
+   unchanged conditions do not start another request.
+3. Press K to preview the current row. A shared Markdown window opens while
+   the cursor remains in the list. Repeated K updates that window. Move to the
+   preview and press q to close it.
+4. Use `ghe` to edit the body, `ght` for the title, and `ghm` for comments.
+   Body, comment, and attribute navigation offers edit/new/vnew/tabnew, so the
+   destination can use the current window, a split, a vertical split, or a tab.
+5. Save an editing buffer with |:write|. Failed saves retain the text. Edits
+   made while a save is running remain modified and are not included in that
+   request. An existing body or attribute buffer with no changes is not sent.
+
+Issue list rows use the following columns, aligned by display width:
+>
+    #12 Fix rendering OPEN   @alice @bob (bug, ui)   8
+    #25 日本語の修正  CLOSED @alice      (feature)   0
+<
+The title is shortened after 100 display cells, followed by `...`; the first
+two assignees and first three labels are shown. These are display limits:
+editing and previews retain complete data. The final number is GitHub's total
+comment count. A font containing the comment icon improves its appearance.
+
+The comment list aligns `@author` and the first line of the body. Deleted
+authors are displayed as `[deleted]`. K displays the full body.
+
+Selection: CTRL-J or CTRL-K toggles the current row and then moves to the next
+or previous row. A `*` marks selected rows. At the list edges the cursor stays
+on the same row. With no selection, an operation uses the cursor row. Copy and
+browser operations use the selected rows in list order, then clear selection.
+Starting a refresh also clears selection, including when the refresh fails.
+Body and comment editing require the selection to be cleared first.
+
+Create an Issue with `ghn` from the Issue list or open the new-Issue URI.
+Choose a Markdown template or Blank, edit the body, and use |:write| to open
+`gh issue create` in a terminal. gh prompts for the title and other options.
+After creation, choose Edit, Copy URL, Open in browser, or Done. Cancellation,
+failure, or an unknown result retains the draft. If gh exits unsuccessfully
+with a created-Issue URL, check GitHub before retrying. Requests are not retried
+automatically. The list's `ghn` opens a horizontal split.
+
+Create comments with `ghn` from the comment list. |:write| posts the text.
+A successful post closes the draft unless it has later, unsent edits.
+Title editing opens a one-line window and closes after successful saving;
+later edits made during saving remain open and modified.
+
+==============================================================================
+BUFFERS                                                     *github-buffers*
+
+All public virtual buffers use `github://`. The corresponding
+`https://github.com/owner/repo/issues...` URLs are also accepted. Identifiers
+must be valid for the operation; a comment ID is its numeric database ID.
+
+URI                                                          Action
+----------------------------------------------------------------------------
+github://{owner}/{repo}/issues                                Issue list
+github://{owner}/{repo}/issues/new                            Create Issue
+github://{owner}/{repo}/issues/{number}                       Edit Issue body
+github://{owner}/{repo}/issues/{number}/assignees             Edit assignees
+github://{owner}/{repo}/issues/{number}/labels                Edit labels
+github://{owner}/{repo}/issues/{number}/comments              Comment list
+github://{owner}/{repo}/issues/{number}/comments/new          Post comment
+github://{owner}/{repo}/issues/{number}/comments/{id}         Edit comment
+
+Assignees and labels are edited one name per line. Saving replaces only that
+attribute; an empty buffer clears it. The complete current set and required
+candidates are fetched, including internal pagination, before replacement.
+Invalid or unavailable names keep the input and prevent the update.
+
+Targets are captured when the operation starts. Switching cwd, windows, or
+repositories while a request runs does not redirect it. Old responses are
+ignored after a newer request or when the owning buffer is unloaded.
+
+
+ISSUE LIST                                        *github-buffer-issue-list*
+
+github://{owner}/{repo}/issues
+    Open the repository's Issues with the initial condition state:open.
+    At most 30 Issues are shown in GitHub's returned order. The columns are
+    number, title, state, assignees, labels, and total comments; see
+    |github-workflow| for display limits and selection behavior.
+
+    Use |<Plug>(gh:issue:search)| to change conditions and
+    |<Plug>(gh:issue:preview)| to inspect the current row. Other available
+    actions are listed in |github-default-key-mappings|. Use |:edit!| to
+    reload with the last successful condition. A failed refresh retains the
+    previous successful result; an empty result displays "0 issues".
+
+    Filetype: gh-issues
+
+ISSUE SEARCH                                    *github-buffer-issue-search*
+
+github:issues-search
+    A one-line buffer opened by ghs from an Issue list. Its initial contents
+    are the last successful search condition. For example:
+>
+    state:closed label:bug
+<
+    Enter in Insert or Normal mode confirms the condition, closes the search
+    view, and returns to the invoking list window. Normal-mode q or CTRL-C
+    in either mode cancels. Empty input or a condition equal to the latest
+    successful condition does not send a request.
+
+    Searches remain restricted to the repository of the invoking list. When
+    the same list is displayed in multiple windows, the most recent caller
+    owns the return window. Reopening its search preserves text being edited.
+
+    Filetype: issue-search
+    User event: gh_open_issue_search
+
+ISSUE BODY                                        *github-buffer-issue-edit*
+
+github://{owner}/{repo}/issues/{number}
+    Read the Issue body into a Markdown editing buffer. |:write| updates only
+    the body; an empty body is allowed. A buffer with no changes is not sent.
+    CRLF text is normalized to LF. Unsaved edits are retained on read or save
+    failure, and edits made after a save starts remain unsent and modified.
+
+    ght opens |github-buffer-issue-title|. gha, ghl, and ghm open the same
+    Issue's assignees, labels, and comments. Their destination menu offers
+    edit, new, vnew, and tabnew. Menus use |vim.ui.select()|.
+
+    Filetype: markdown
+    User event: gh_open_issue
+
+ISSUE TITLE                                      *github-buffer-issue-title*
+
+    ght opens a one-line split for the current Issue's title. |:write| sends
+    only the title and requires one nonblank line. Successful saving closes
+    the title buffer, except when later edits remain unsent. Each Issue has
+    its own title buffer, so editing another Issue does not replace a draft.
+
+NEW ISSUE                                          *github-buffer-issue-new*
+
+github://{owner}/{repo}/issues/new
+    Choose one of the repository's Markdown templates, or Blank at the end
+    of the menu, then edit its body. |:write| opens a terminal running
+    gh issue create for this repository, with the saved body in a temporary
+    file. Enter the title and other options in gh's interactive terminal.
+
+    The Issue list's ghn opens a horizontal split, keeping the list visible.
+    Repeated writes during creation do not launch another terminal. On
+    success, choose Edit, Copy URL, Open in browser, or Done. The original
+    draft closes only if it has no edits made after submission.
+
+    Cancellation, failure, or an unknown result retains the draft. gh can
+    exit unsuccessfully after creating an Issue; if a URL is reported or the
+    result is unknown, check GitHub before retrying. The plugin never retries
+    creation automatically.
+
+    Filetype: markdown
+    User event: gh_open_issue (after template selection)
+
+ISSUE ASSIGNEES                           *github-buffer-issue-assignee-list*
+
+github://{owner}/{repo}/issues/{number}/assignees
+    Read all current assignees. Enter one GitHub login per line and save with
+    |:write|. Saving replaces only the assignees; an empty buffer clears all.
+    Logins are matched without case sensitivity and duplicates are removed.
+    At most 10 distinct users may be assigned. Invalid/unavailable users or
+    incomplete pagination prevent the update and preserve the input.
+
+    A buffer with no changes is not sent. See |github-buffer-issue-label-list|
+    for label editing; the two fields are saved independently.
+
+    Filetype: gh-issues-assignees
+    User event: gh_open_issue_assignees
+
+ISSUE LABELS                                 *github-buffer-issue-label-list*
+
+github://{owner}/{repo}/issues/{number}/labels
+    Read all current labels, using internal pagination. Enter one complete
+    label name per line and save with |:write|. Names containing spaces are
+    kept as one label. Saving replaces only labels; an empty buffer clears
+    all. Invalid/unavailable names prevent the update and preserve the input.
+    A buffer with no changes is not sent.
+
+    All label pages must be fetched before replacement is allowed. This
+    prevents saving a partial set as if it were the complete attribute.
+
+    User event: gh_open_issue_labels
+
+COMMENT LIST                              *github-buffer-issue-comment-list*
+
+github://{owner}/{repo}/issues/{number}/comments
+    Display at most 100 comments. Rows align the @author and the body's first
+    line. A deleted author is shown as [deleted]. Use K for the complete body,
+    ghn to post, ghe to edit, ghy to copy URLs, and CTRL-O to open a browser.
+    Selection uses CTRL-J and CTRL-K, as on the Issue list.
+
+    Use |:edit!| to fetch the current comments again. A failed refresh retains
+    the existing result; an empty result displays "0 comments".
+
+    Filetype: gh-issues-comments
+
+NEW COMMENT                                *github-buffer-issue-comment-new*
+
+github://{owner}/{repo}/issues/{number}/comments/new
+    Edit a Markdown draft and use |:write| to post it. Blank or whitespace-only
+    text is rejected. Saving captures the body at that moment; repeated
+    writes while posting do not submit another request.
+
+    A successful post refreshes its originating comment list, when available,
+    and closes the draft unless later edits remain. Failure or an unknown
+    result preserves the draft and does not trigger an automatic retry.
+
+    Filetype: markdown
+    User event: gh_open_issue_comment
+
+EDIT COMMENT                              *github-buffer-issue-comment-edit*
+
+github://{owner}/{repo}/issues/{number}/comments/{id}
+    Read and edit the comment body. {id} is the numeric comment database ID,
+    not the Issue number. The comment must belong to the specified Issue.
+    |:write| updates only the body. Blank/whitespace-only text is rejected;
+    unchanged text is not sent. CRLF is normalized to LF when reading.
+
+    Permission errors, deleted comments, and unknown results preserve input.
+    Edits made during saving remain unsent and modified. The buffer remains
+    open after successful editing.
+
+    Filetype: markdown
+    User event: gh_open_issue_comment
+
+PREVIEW                                              *github-buffer-preview*
+
+github:preview
+    K on an Issue or comment list reuses a shared Markdown preview window in
+    the current tab. Focus stays in the invoking list. Repeating K updates
+    this view instead of opening another split. Move to it and press q to
+    wipe the preview buffer.
+
+    The preview uses the list's fetched body, which may be older than GitHub.
+    Reload the list with |:edit!| to fetch current content. Previewing does not
+    send another request and does not edit the body.
+
+    Filetype: markdown
+
+==============================================================================
+PULL REQUEST LIST                                    *github-buffer-pull-list*
+
+    :GitHub pulls
+    :GitHub pulls owner/repo
+    :edit github://owner/repo/pulls
+    :edit https://github.com/owner/repo/pulls
+
+    Show up to 30 open PRs. Columns match the Issue list: number, title, state,
+    assignees, labels, and conversation comment count (excluding review-line
+    comments). MERGED is displayed separately from CLOSED.
+
+    Press ghs to search; use state:closed for closed PRs or is:merged for merged
+    PRs. The search buffer has the same Enter/q/<C-c> behavior as Issue search.
+    K previews the full body. <C-j>/<C-k> select rows, ghy copies URLs, and
+    <C-o> opens URLs in a browser. Selection clears after URL operations.
+    Reload with :edit!. PR editing, creation, merging, and review operations
+    are not provided. The filetype is gh-pulls.
+
+==============================================================================
+KEY MAPPINGS                 *github-key-mappings* *github-default-key-mappings*
+
+Mappings are buffer-local and use the original gh Plug names for custom keys.
+All defaults below are Normal-mode mappings.
+
+Issue list:
+    Key       Plug                                      Action
+    ------------------------------------------------------------------------
+    ghe       *<Plug>(gh:issue:edit)*                      Edit body
+    ght       *<Plug>(gh:issue:edit:title)*                Edit title
+    ghn       *<Plug>(gh:issue:new)*                       Create Issue
+    gho       *<Plug>(gh:issue:open)*                      Reopen
+    ghc       *<Plug>(gh:issue:close)*                     Close
+    gha       *<Plug>(gh:issue:assignees)*                 Edit assignees
+    ghl       *<Plug>(gh:issue:labels)*                    Edit labels
+    ghm       *<Plug>(gh:issue:comments)*                  Comment list
+    ghs       *<Plug>(gh:issue:search)*                    Search
+    K         *<Plug>(gh:issue:preview)*                   Preview body
+    <C-j>     *<Plug>(gh:issue:select:next)*               Toggle, move down
+    <C-k>     *<Plug>(gh:issue:select:prev)*               Toggle, move up
+    ghy       *<Plug>(gh:issue:yank)*                      Copy URL(s)
+    <C-o>     *<Plug>(gh:issue:view)*                      Open in browser
+
+Issue body editing: ght, gha, ghl, and ghm use the same Plug mappings as above.
+
+Pull request list:
+    Key       Plug                                      Action
+    ------------------------------------------------------------------------
+    ghs       *<Plug>(gh:pull:search)*                    Search
+    K         *<Plug>(gh:pull:preview)*                   Preview body
+    <C-j>     *<Plug>(gh:pull:select:next)*               Toggle, move down
+    <C-k>     *<Plug>(gh:pull:select:prev)*               Toggle, move up
+    ghy       *<Plug>(gh:pull:yank)*                      Copy URL(s)
+    <C-o>     *<Plug>(gh:pull:view)*                      Open in browser
+
+Comment list:
+    Key       Plug                                      Action
+    ------------------------------------------------------------------------
+    ghn       *<Plug>(gh:issue:comment:new)*              Post comment
+    ghe       *<Plug>(gh:issue:comment:edit)*             Edit comment
+    K         *<Plug>(gh:issue:comment:preview)*          Preview body
+    <C-j>     *<Plug>(gh:issue:comment:select:next)*      Toggle, move down
+    <C-k>     *<Plug>(gh:issue:comment:select:prev)*      Toggle, move up
+    ghy       *<Plug>(gh:issue:comment:yank)*             Copy URL(s)
+    <C-o>     *<Plug>(gh:issue:comment:view)*             Open in browser
+
+For example, remap a custom key after opening an Issue list:
+>lua
+    vim.keymap.set("n", "<leader>ge", "<Plug>(gh:issue:edit)",
+      { buffer = true, remap = true })
+<
+==============================================================================
+COMMANDS                                                    *github-commands*
+
+:GitHub {issues|pulls} [owner/repo]                              *:GitHub*
+    Open an Issue or pull request list in the current window. Without a
+    repository argument, resolve the current cwd's Git origin. Explicit
+    owner/repo works without a local checkout. Only github.com is supported.
+    Invalid arguments or origin failures are reported without opening a list.
+    If the source window/buffer changes or you edit while origin lookup is
+    pending, its delayed result does not replace your work. Starting another
+    GitHub command supersedes a pending list-opening command.
+>
+    :GitHub issues
+    :GitHub pulls
+    :GitHub issues skanehira/github.nvim
+    :GitHub pulls skanehira/github.nvim
+<
+:GitHub related-pr {commit}
+:GitHub related-pr {owner/repo} {commit}
+    Display the first PR associated with a commit. The first form resolves
+    the current checkout's origin; the second works without a checkout.
+>
+    :GitHub related-pr HEAD
+    :GitHub related-pr skanehira/github.nvim HEAD
+<
+:GhGetAssociatedPullRequest {commit}                  *:GhGetAssociatedPullRequest*
+    Compatibility alias for :GitHub related-pr.
+    Display the first PR associated with a commit. The repository is resolved
+    from the Git origin at the cwd captured when the command is run.
+
+:GhGetAssociatedPullRequest {owner} {repo} {commit}
+    Display the first associated PR from the explicit repository. This form
+    does not require a local Git checkout. No associated PR and request
+    failures are reported separately.
+
+==============================================================================
+HIGHLIGHTS AND EVENTS                                  *github-customization*
+
+Highlight groups:
+    gh_issue_number          Issue number (blue)
+    gh_issue_open            OPEN state (green)
+    gh_issue_closed          CLOSED state (red)
+    gh_pull_merged           MERGED state (gh_purple)
+    gh_issue_user            Assignees (linked through gh_purple to Constant)
+    gh_issue_labels          Labels (orange)
+    gh_issue_comment_user    Comment author (gh_purple)
+    gh_select                Selection marker (ErrorMsg)
+
+Defaults are restored when a colorscheme changes without overriding explicitly
+configured groups. The color groups gh_blue, gh_green, gh_orange, gh_red, and
+gh_purple can also be customized with |:highlight| or |nvim_set_hl()|.
+
+Filetypes:
+    gh-issues                Issue list
+    gh-pulls                 Pull request list
+    gh-issues-comments       Comment list
+    gh-issues-assignees      Assignee editor
+    markdown                 Issue/comment bodies, drafts, and previews
+    issue-search             One-line Issue/PR search
+
+User events are emitted in the owning buffer's context when its contents are
+ready. They can be used for buffer-local customization; completion is not
+provided by this plugin.
+    gh_open_issue            Issue body or new-Issue draft
+    gh_open_issue_assignees   Assignees ready
+    gh_open_issue_labels      Labels ready
+    gh_open_issue_comment    Comment body or new-comment draft
+    gh_open_issue_search     Search buffer ready
+
+Example:
+>lua
+    vim.api.nvim_create_autocmd("User", {
+      pattern = "gh_open_issue",
+      callback = function()
+        vim.bo.spelllang = "en"
+      end,
+    })
+<
+==============================================================================
+LIMITS                                                       *github-limits*
+
+- Only github.com is supported in this release.
+- Search displays at most 30 Issues or PRs; comments display at most 100 entries.
+  There is no list page navigation. Assignee/label pagination is internal and
+  independent of these display limits.
+- GitHub communication uses gh. Tokens and gh authentication files are managed
+  by gh and are not read directly by the plugin.
+- Clipboard operations write URLs to the `+` register, separated by LF without
+  an extra trailing line. Neovim does not reliably expose provider completion;
+  the plugin reports the requested count and an unconfirmed result rather than
+  claiming success. Detectable failures, such as no provider, are reported.
+- Saving the same field from multiple clients follows GitHub's last accepted
+  update. Each request changes only the selected field.
+- Completion, Actions, PR reviews, Gists, repository-file browsing, and README
+  buffers are not implemented. Actions and review integration are future work.
+
+==============================================================================
+FAQ                                                            *github-faq*
+
+How do I show closed Issues?
+    Open an Issue list, press ghs, replace state:open with state:closed, and
+    press Enter. Add qualifiers such as label:bug to narrow the search.
+
+Why do gh-issues or gh_open_issue still contain "gh"?
+    Filetypes, User events, and Plug mappings retain the original names for
+    existing customizations. The public URI scheme is github://.
+
+How do I reload or inspect newer content?
+    Use :edit! on a list to fetch it again, then K for the refreshed preview.
+    For an editing buffer, :edit! can discard unsaved changes; preserve any
+    draft you want before requesting a reload.
+
+Why do URLs report "result unconfirmed" after copying?
+    Neovim can return before the clipboard provider reports completion or
+    failure. The plugin writes to the + register but does not claim success
+    without confirmation. Check |:checkhealth| if the provider is unavailable.
+
+Where are completion settings, Actions, or PR review?
+    They are not implemented in this release. Completion was excluded from
+    the port; Actions and review integration are future work. See
+    |github-limits|. The original plugin's TODO-only interfaces are also not
+    supported here.
+
+==============================================================================
+ vim:tw=78:ts=8:noet:ft=help:norl:

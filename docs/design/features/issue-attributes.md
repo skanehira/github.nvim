@@ -38,6 +38,8 @@ UC-006の利用者操作を実現する。対象規則はBR-028, BR-029, BR-030,
 - E2: 権限・通信などの保存失敗では、入力を保持して理由を案内する。
 - E3: 現在の集合を欠けなく取得できない場合は理由を表示し、編集・保存を開始しない。既存の未保存の入力があれば保持する。
 
+未変更の`:write`は送信しない。担当者名は大文字小文字を区別せず照合・重複除去し、10名を超える場合は候補取得や更新を始めず入力を保持して案内する。ラベル名の照合は入力どおり行う。
+
 ## API
 
 GraphQL issueのassignees/labels connectionはpageInfo/endCursorで最後まで取得。assignableUsersとrepository labelsを対象repoで照合し、updateIssueのassigneeIdsまたはlabelIdsだけを指定する。空配列で全解除。DESIGN.md「GitHub API一覧」参照。

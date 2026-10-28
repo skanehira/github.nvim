@@ -6,11 +6,11 @@
 
 ## 目的とスコープ
 
-Issue・コメントの閲覧、作成、更新、状態変更、担当者・ラベル編集、URL操作、関連PRのURL確認を提供する。公開URIは`github://`とする。入力補完は今回対象外。将来github-actions.nvimとreview.nvimを統合できるよう、機能ごとの設定・状態・依存・画面を分離する。詳細な操作と受け入れ基準はUSECASES.md、機能別契約はfeatures/を正本とする。
+Issue・コメントの閲覧、作成、更新、状態変更、担当者・ラベル編集、URL操作、関連PRのURL確認と、PR一覧の閲覧・検索を提供する。公開URIは`github://`とする。入力補完は今回対象外。将来github-actions.nvimとreview.nvimを統合できるよう、機能ごとの設定・状態・依存・画面を分離する。詳細な操作と受け入れ基準はUSECASES.md、機能別契約はfeatures/を正本とする。
 
 ## アーキテクチャと技術選定
 
-Neovim Luaを使用し、最低版は実測した0.10.4とする。GitHub APIは認証をghへ委譲し、`gh api`を引数配列・JSON stdinで呼ぶ。Issue作成は`gh issue create -F <本文ファイル> -R github.com/<owner>/<repo>`の対話端末を使う。`github://`はBufReadCmd/BufWriteCmdで処理する。HTTPS入口は対象のGitHub Issue URLだけをBufAddで正規化し、標準netrwや他HTTPSハンドラを置換しない。
+Neovim Luaを使用し、最低版は実測した0.10.4とする。GitHub APIは認証をghへ委譲し、`gh api`を引数配列・JSON stdinで呼ぶ。Issue作成は`gh issue create -F <本文ファイル> -R github.com/<owner>/<repo>`の対話端末を使う。`github://`はBufReadCmd/BufWriteCmdで処理する。HTTPS入口は対応するGitHub Issue URLとPR一覧URLだけをBufAddで正規化し、標準netrwや他HTTPSハンドラを置換しない。
 
 依存方向は、機能UI → 各機能の操作 → 共通のGitHub/Git・Neovimアダプタとする。共通部はプロセス実行、gh呼出、URI解析、対象リポジトリの識別、画面・要求の所有管理を担当する。Issueの本文とレビューの下書きは別モデルにする。Actionsとレビューの実装や既存データ移行は将来の統合時に設計する。
 
@@ -36,7 +36,7 @@ Neovim Luaを使用し、最低版は実測した0.10.4とする。GitHub APIは
 
 | 操作 | gh経由のAPI | 担当 |
 | --- | --- | --- |
-| Issue検索、Issue詳細、担当者・ラベル全件、テンプレート、関連PR | GraphQL `gh api graphql` | issue-list、issue-edit、issue-attributes、issue-create、related-pr |
+| Issue/PR検索、Issue詳細、担当者・ラベル全件、テンプレート、関連PR | GraphQL `gh api graphql` | issue-list、issue-edit、issue-attributes、issue-create、related-pr |
 | Issueタイトル・本文・状態・担当者・ラベルの更新 | GraphQL `updateIssue` | issue-edit、issue-state、issue-attributes |
 | コメント一覧・単体取得・投稿・更新 | REST `repos/{owner}/{repo}/issues/{number}/comments`、`repos/{owner}/{repo}/issues/comments/{id}` | comment-list、comment-create、comment-edit |
 | 対話式のIssue作成 | `gh issue create` | issue-create |
@@ -47,17 +47,23 @@ GraphQLはJSON `{query, variables}`を`--input -`で渡し、RESTもメソッド
 
 | 入口 | 操作 |
 | --- | --- |
+| `:GitHub issues [owner/repo]`、`:GitHub pulls [owner/repo]` | Issue/PR一覧を開く。省略時は実行時cwdのGit originを使う。引数指定時はローカルcheckout不要。 |
+| `github://owner/repo/pulls` | PR一覧。対応HTTPS URLも受ける。最大30件、検索・プレビュー・選択・URLコピー・ブラウザに対応する。PRの編集・レビューは対象外。 |
 | `github://owner/repo/issues` | Issue一覧。対応するGitHub HTTPS URLも受ける。 |
 | `github://owner/repo/issues/new` | Issue作成。 |
 | `github://owner/repo/issues/<number>` | Issue本文編集。 |
 | `github://owner/repo/issues/<number>/assignees`、`/labels` | 担当者・ラベル編集。 |
 | `github://owner/repo/issues/<number>/comments`、`/comments/new`、`/comments/<comment-id>` | コメント一覧・投稿・編集。comment-idは数値database ID。 |
-| `:GhGetAssociatedPullRequest <commit>` または `:GhGetAssociatedPullRequest <owner> <repo> <commit>` | 関連PR先頭1件のURLを表示する。 |
+| `:GitHub related-pr [owner/repo] <commit>` | 関連PR先頭1件のURLを表示する。省略時はGit originを使う。既存`:GhGetAssociatedPullRequest <commit>` / `<owner> <repo> <commit>`も互換用に残す。 |
 | `require('github').setup(opts)` | 初期版は`nil`または空テーブルを受け付ける。設定キーの追加は将来の機能統合時に行う。詳細はsetup設計を参照。 |
 
 一覧の既定キーマップは`ghs`検索、`K`プレビュー、`ghn`作成、`ghe`本文編集、`ght`タイトル編集、`ghc`/`gho`状態変更、`gha`/`ghl`担当者・ラベル、`ghm`コメント、`<C-j>`/`<C-k>`選択、`<C-o>`ブラウザ、`ghy`コピー。各バッファの操作は機能設計を参照する。
 
 ## 横断規約
+
+- 一覧は移植元のコンパクトな列表示を使う。窓の再利用・検索バッファ・開き方・公開PlugとUserイベントはMIGRATION_PARITY.mdとdoc/github.txtに対応を記載する。
+- 仮想バッファはnolist・nonumber・nowrap・cursorline・bufhidden=hideを基本とし、プラグインが開く窓では、通常バッファへ戻ると元の窓設定を復元する。利用者・他プラグインによる標準分割はNeovimの設定継承に従い、新規窓全体をフックして変更しない。進行中の取得・保存は対象バッファへ表示する。
+- 本文のCRLFはLFへ正規化する。変更のない既存編集バッファの保存は更新を送らない。
 
 - 初期版はgithub.comを対象とし、github:// URIとowner/repo明示指定のhostはgithub.comとする。originがgithub.com以外の場合は対象外として案内する。GitHub上の対象はhost・owner・repoで識別し、ローカルrepo・worktree・操作開始時cwdとは分ける。API応答やキャッシュは機能・対象・画面ごとに区別する。
 - git/gh実行器、ブラウザ、クリップボードと時刻などの外界は注入可能にする。シェルへ入力を連結しない。認証ファイルを直接読まず、秘密をログに出さない。
@@ -73,7 +79,7 @@ GraphQLはJSON `{query, variables}`を`--input -`で渡し、RESTもメソッド
 - Neovimのクリップボードproviderは書込み失敗を同期的に返さない場合がある。`+`への書込みを要求した後、完了が確認できない場合は件数と結果未確認を案内する。検知できた失敗は成功と案内しない。
 
 - ghはIssueを作成済みでも添付失敗で非0終了しうる。非0だけで未作成と断定せずURLと状態を案内する。
-- GitHub検索結果は最大30件、コメント一覧は最大100件。画面のページ送りは初期版対象外。属性編集に必要な内部ページングは実施する。
+- Issue/PRのGitHub検索結果は最大30件、コメント一覧は最大100件。画面のページ送りは初期版対象外。属性編集に必要な内部ページングは実施する。
 - HTTPSのBufAdd正規化はnetrwと既存の未保存バッファで実測済み。他pluginのBufAdd順序、複数窓、全URI形式はPoC未検証であり、実装時の統合テストで確かめる。対象外URLと他pluginの入力を破壊しない。
 - Neovim 0.10.0〜0.10.3は未検証。最低版を0.10.4とする。
 - 実測したNeovim 0.13 nightlyの同梱netrwにはHTTPSハンドラがない。github.nvimは対象外のURLを処理せず、既存のハンドラがある場合は維持する。

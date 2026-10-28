@@ -11,6 +11,8 @@
 
 一覧で選択印を解除した上で`ghe`、または`github://owner/repo/issues/<number>/comments/<comment-id>`で開く。comment-idは数値database ID。現在本文を取得し、指定Issueの一致確認後に編集・`:write`を許可する。空白だけは送らない。`:write`時に本文とchangedtickを固定し、同一バッファで保存中の追加保存は処理中と案内して抑止する。保存開始後の追記は未保存として保持する。成功時もchangedtickが変わっていれば追記を未保存のまま残す。
 
+CRLF本文はLFに正規化して表示する。取得済み本文を変更していない`:write`ではPATCHを送信しない。
+
 ## API
 
 `GET repos/{owner}/{repo}/issues/comments/{id}`の`issue_url`をowner/repo/Issue番号と照合する。一致時のみ`PATCH`同endpointにJSON stdin `{"body":"..."}`を渡す。取得・所属確認に失敗した場合はPATCHしない。取得失敗を空本文の成功として扱わない。PATCH後に拒否された場合は失敗を表示し、通信断などで結果を確認できない場合は結果不明と表示する。いずれも入力を保持し、自動再送しない。共通認証・エラーはDESIGN.md「横断規約」参照。
