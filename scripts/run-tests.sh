@@ -18,6 +18,7 @@ trap 'rm -rf "$root"' EXIT HUP INT TERM
 export GITHUB_NVIM_TEST_ROOT="$root"
 export XDG_CONFIG_HOME="$root/config" XDG_DATA_HOME="$root/data"
 export XDG_STATE_HOME="$root/state" XDG_CACHE_HOME="$root/cache"
+export XDG_CONFIG_DIRS="$root/config-dirs" XDG_DATA_DIRS="$root/data-dirs"
 export GITHUB_NVIM_PLENARY_DIR="$PWD/.deps/plenary.nvim"
 export GITHUB_NVIM_SPEC_FILE="${1:-}"
 unset VIMINIT EXINIT

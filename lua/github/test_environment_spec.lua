@@ -3,6 +3,7 @@ describe("isolated Neovim test environment", function()
     local root = vim.env.GITHUB_NVIM_TEST_ROOT
     assert.is_string(root)
     assert.is_nil(vim.g.external_init_loaded)
+    assert.is_nil(vim.env.EXINIT)
     assert.equals(root .. "/config/nvim", vim.fn.stdpath("config"))
     assert.equals(root .. "/data/nvim", vim.fn.stdpath("data"))
     assert.equals(root .. "/state/nvim", vim.fn.stdpath("state"))
