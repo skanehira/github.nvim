@@ -94,6 +94,9 @@ function M.read(buf, target)
     })
     vim.bo[buf].buftype = "nofile"
     vim.bo[buf].swapfile = false
+    vim.keymap.set("n", "<C-o>", function()
+      require("github.features.links.open").from_list(buf, "comment")
+    end, { buffer = buf })
     vim.keymap.set("n", "K", function()
       preview(buf)
     end, { buffer = buf })

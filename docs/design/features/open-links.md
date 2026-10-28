@@ -13,7 +13,7 @@ Issue・コメント一覧の`<C-o>`で選択中の行を開く。`<C-j>`・`<C-
 
 ## API
 
-GitHubから取得したHTTP(S) URLをブラウザ起動アダプタへ渡す。GitHub APIへの新たな要求は行わない。引数はシェルへ連結しない。共通実行境界はDESIGN.md「横断規約」参照。
+GitHubから取得したHTTP(S) URLをブラウザ起動アダプタへ渡す。GitHub APIへの新たな要求は行わない。引数はシェルへ連結しない。共通実行境界はDESIGN.md「横断規約」参照。 Issue作成後は`require("github.features.links.open").open({url})`を呼ぶ。ブラウザの起動は共通process実行器を経由し、終了コードごとに結果を判定する。
 
 ## 実装の配置
 
