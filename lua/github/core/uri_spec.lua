@@ -20,6 +20,13 @@ describe("GitHub URI parsing", function()
     end
   end)
 
+  it("round trips pull list URI and HTTPS URL", function()
+    local parsed = uri.parse("github://owner/repo/pulls")
+    assert.same({ kind = "pull_list", host = "github.com", owner = "owner", repo = "repo" }, parsed)
+    assert.same(parsed, uri.parse("https://github.com/owner/repo/pulls"))
+    assert.equals("github://owner/repo/pulls", uri.format(parsed))
+  end)
+
   it("rejects missing and invalid identifiers, hosts, and extra paths", function()
     local cases = {
       "github:///repo/issues",
@@ -30,7 +37,9 @@ describe("GitHub URI parsing", function()
       "github://owner/repo/issues/1/unknown",
       "github://owner/repo/issues/1/labels/x",
       "https://example.com/owner/repo/issues",
-      "https://github.com/owner/repo/pulls",
+      "https://github.com/owner/repo/pulls/1",
+      "github://owner/repo/issuespull_list",
+      "github://owner/repo/pulls/new",
     }
     for _, value in ipairs(cases) do
       local parsed, err = uri.parse(value)

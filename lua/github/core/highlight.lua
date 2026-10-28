@@ -13,6 +13,7 @@ local function define()
     gh_issue_number = "gh_blue",
     gh_issue_open = "gh_green",
     gh_issue_closed = "gh_red",
+    gh_pull_merged = "gh_purple",
     gh_issue_user = "gh_purple",
     gh_issue_labels = "gh_orange",
     gh_issue_comment_user = "gh_purple",

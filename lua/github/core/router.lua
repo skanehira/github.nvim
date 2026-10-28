@@ -1,6 +1,7 @@
 local M = {}
 local uri = require("github.core.uri")
 local features = {
+  pull_list = "github.features.issues.list",
   issue_list = "github.features.issues.list",
   issue_create = "github.features.issues.create",
   issue_edit = "github.features.issues.edit",

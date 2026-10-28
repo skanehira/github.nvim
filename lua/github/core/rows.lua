@@ -47,9 +47,9 @@ local function align(rows, groups, selected)
   return lines, spans
 end
 
-function M.issues(items, selected)
+function M.issues(items, selected, empty_label)
   if #items == 0 then
-    return { "0 issues" }, {}
+    return { "0 " .. (empty_label or "issues") }, {}
   end
   local rows, groups = {}, {}
   for i, item in ipairs(items) do
@@ -70,7 +70,8 @@ function M.issues(items, selected)
     }
     groups[i] = {
       [1] = "gh_issue_number",
-      [3] = item.state == "CLOSED" and "gh_issue_closed" or "gh_issue_open",
+      [3] = item.state == "MERGED" and "gh_pull_merged"
+        or (item.state == "CLOSED" and "gh_issue_closed" or "gh_issue_open"),
       [4] = "gh_issue_user",
       [5] = "gh_issue_labels",
     }

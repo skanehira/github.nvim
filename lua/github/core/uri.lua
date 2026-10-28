@@ -21,15 +21,23 @@ function M.parse(value)
     return nil, "unsupported GitHub URI"
   end
   local path = value:match("^github://(.+)$") or value:match("^https://github%.com/(.+)$")
-  local owner, repo, tail
+  local owner, repo, resource, tail
   if path then
-    owner, repo, tail = path:match("^([^/]+)/([^/]+)/issues(.*)$")
+    owner, repo, resource, tail = path:match("^([^/]+)/([^/]+)/([^/]+)(.*)$")
   end
-  if not owner or not owner:match("^[%w][%w%-]*$") or not repo:match("^[%w_.%-]+$") then
+  if
+    not owner
+    or not owner:match("^[%w][%w%-]*$")
+    or not repo:match("^[%w_.%-]+$")
+    or (resource ~= "issues" and resource ~= "pulls")
+    or (resource == "pulls" and tail ~= "")
+  then
     return nil, "unsupported GitHub URI"
   end
   local kind, issue, comment
-  if tail == "" then
+  if resource == "pulls" then
+    kind = "pull_list"
+  elseif tail == "" then
     kind = "issue_list"
   elseif tail == "/new" then
     kind = "issue_create"
@@ -62,6 +70,9 @@ function M.parse(value)
 end
 
 function M.format(target)
+  if target.kind == "pull_list" then
+    return "github://" .. target.owner .. "/" .. target.repo .. "/pulls"
+  end
   local suffix = suffixes[target.kind]
   if not suffix then
     return nil

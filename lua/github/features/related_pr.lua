@@ -44,11 +44,25 @@ local function lookup(target, commit, run, notify)
   end)
 end
 
-function M.setup(opts)
+function M.get(commit, target, opts)
   opts = opts or {}
   local run = opts.run or require("github.core.process").run
   local notify = opts.notify or vim.notify
-  local get_cwd = opts.cwd or vim.fn.getcwd
+  if target then
+    return lookup(target, commit, run, notify)
+  end
+  local cwd = (opts.cwd or vim.fn.getcwd)()
+  require("github.core.repo").resolve(cwd, run, function(resolved, err)
+    if not resolved then
+      return notify("Cannot resolve repository in " .. cwd .. ": " .. err, vim.log.levels.ERROR)
+    end
+    lookup(resolved, commit, run, notify)
+  end)
+end
+
+function M.setup(opts)
+  opts = opts or {}
+  local notify = opts.notify or vim.notify
   vim.api.nvim_create_user_command("GhGetAssociatedPullRequest", function(command)
     local args = command.fargs
     if #args ~= 1 and #args ~= 3 then
@@ -60,15 +74,9 @@ function M.setup(opts)
       if not target then
         return notify("Invalid repository: " .. err .. "; specify owner repo commit", vim.log.levels.ERROR)
       end
-      return lookup(target, args[3], run, notify)
+      return M.get(args[3], target, opts)
     end
-    local cwd = get_cwd()
-    repo.resolve(cwd, run, function(target, err)
-      if not target then
-        return notify("Cannot resolve repository in " .. cwd .. ": " .. err, vim.log.levels.ERROR)
-      end
-      lookup(target, args[1], run, notify)
-    end)
+    M.get(args[1], nil, opts)
   end, { nargs = "*", force = true })
 end
 
