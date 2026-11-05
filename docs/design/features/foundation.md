@@ -12,8 +12,9 @@ GitHub/Gitの外部コマンド実行、リポジトリ文脈、URIの解析・�
 - 操作文脈は`{host, owner, repo, local_repo?, cwd?}`。GitHub識別子とローカルGit/worktreeのpathは別々に保持し、呼出し時に固定する。初期版はgithub.comのみを対象とし、github:// URIとowner/repo明示指定のhostはgithub.comとする。originが別hostなら対象外として案内する。
 - 外部実行は`run(argv, {cwd?, stdin?, env?, timeout?}, callback)`を境界とする。argvは文字列配列、結果は`{code, signal, stdout, stderr}`または起動エラー。callbackはNeovimメインループで1回だけ呼ぶ。実行器は注入可能とし、トークンを引数・通知・ログに出さない。
 - gh adapterは対象hostを明示し、GraphQLはJSON `{query, variables}`をstdinに渡す。RESTもmethod・endpoint・JSON stdinを明示する。非0終了、起動失敗、JSON不正、GraphQL errorsを成功扱いしない。書込み結果が不明な場合は自動再送しない。
-- URI parserはDESIGN.md「CLI・公開インターフェース」の8形式を解析し、正の整数のIssue番号とcomment database IDを検証する。未知の区分や余分なpathを受け入れない。解析結果は`{kind, host, owner, repo, issue_number?, comment_id?}`。公開URIとGitHub URLから同じ対象を導く。
+- URI parserはDESIGN.md「CLI・公開インターフェース」のowner/repoを含む形式を解析し、正の整数のIssue番号とcomment database IDを検証する。未知の区分や余分なpathを受け入れない。解析結果は`{kind, host, owner, repo, issue_number?, comment_id?}`。公開URIとGitHub URLから同じ対象を導く。
 - `plugin/github.lua`は起動時に共通routerを登録し、URI処理を可能にする。routerは該当機能を操作時に遅延読込する。テストでは`runtime plugin/github.lua`で登録する。
+- routerは`github://issues`と`github://pulls`を、URI parserを通さず名前の完全一致で判定する。URI parserの解析結果は常にowner/repoを持つので、これらはparserの対象にしない。開いた時点のcwdを固定して`git`でoriginを解決し、そのバッファを表示している全windowを正規の一覧へ切り替える。切替時の代替バッファは開く前のものを保つ。解決前に利用者がバッファを離れたら、エラーも切替も行わない。解決に失敗したらエラーを表示し、空の読取り専用バッファを残す。`:edit`で再試行でき、離れると消える。
 - `BufAdd`で対応するGitHub HTTPS URLのみ正規化する。既存の正規バッファがある場合は、未保存データを持つバッファを破棄せず既存バッファへの切替を試みる。安全に統合できない場合はエラーを表示し、他バッファを破棄しない。対象外URLとnetrw・他のハンドラを維持する。
 - 読込・保存は対象バッファID、操作文脈、要求世代を持つ。コールバックで有効性と世代を確認する。保存開始時のchangedtickを保持し、後続編集があればmodifiedを解除しない。
 
