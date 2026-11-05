@@ -11,6 +11,40 @@ local features = {
   comment_create = "github.features.comments.create",
   comment_edit = "github.features.comments.edit",
 }
+local current_repository_lists = {
+  ["github://issues"] = "issue_list",
+  ["github://pulls"] = "pull_list",
+}
+local function open_current_repository_list(buf, kind)
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].modifiable = false
+  local cwd = vim.fn.getcwd()
+  -- schedule_wrap を外さない: run が同期で callback を呼ぶと :edit が nested でない BufReadCmd の中で走り、一覧が読み込まれない
+  require("github.core.repo").resolve(
+    cwd,
+    nil,
+    vim.schedule_wrap(function(resolved, err)
+      if not vim.api.nvim_buf_is_valid(buf) then
+        return
+      end
+      if not resolved then
+        return vim.notify("Cannot resolve repository in " .. cwd .. ": " .. err, vim.log.levels.ERROR)
+      end
+      resolved.kind = kind
+      local name = uri.format(resolved)
+      for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+        local ok, open_err = pcall(vim.api.nvim_win_call, win, function()
+          vim.cmd("keepalt edit " .. vim.fn.fnameescape(name))
+        end)
+        if not ok then
+          vim.notify("Cannot open " .. name .. ": " .. tostring(open_err), vim.log.levels.ERROR)
+        end
+      end
+    end)
+  )
+end
 local function dispatch(event, operation)
   local target = uri.parse(vim.api.nvim_buf_get_name(event.buf))
   if not target then
@@ -56,6 +90,10 @@ function M.setup()
     group = group,
     pattern = "github://*",
     callback = function(event)
+      local kind = current_repository_lists[vim.api.nvim_buf_get_name(event.buf)]
+      if kind then
+        return open_current_repository_list(event.buf, kind)
+      end
       dispatch(event, "read")
     end,
   })
