@@ -48,6 +48,7 @@ GraphQLはJSON `{query, variables}`を`--input -`で渡し、RESTもメソッド
 | 入口 | 操作 |
 | --- | --- |
 | `:GitHub issues [owner/repo]`、`:GitHub pulls [owner/repo]` | Issue/PR一覧を開く。省略時は実行時cwdのGit originを使う。引数指定時はローカルcheckout不要。 |
+| `github://issues`、`github://pulls` | 開いた時点のcwdのGit originからリポジトリを解決し、`github://owner/repo/issues`、`github://owner/repo/pulls`の一覧へ置き換える。解決できなければエラーを表示し、空の読取り専用バッファを残す。`:edit`で再試行できる。対応HTTPS URLは持たない。 |
 | `github://owner/repo/pulls` | PR一覧。対応HTTPS URLも受ける。最大30件、検索・プレビュー・選択・URLコピー・ブラウザに対応する。PRの編集・レビューは対象外。 |
 | `github://owner/repo/issues` | Issue一覧。対応するGitHub HTTPS URLも受ける。 |
 | `github://owner/repo/issues/new` | Issue作成。 |

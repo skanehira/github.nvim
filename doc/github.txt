@@ -135,9 +135,21 @@ All public virtual buffers use `github://`. The corresponding
 `https://github.com/owner/repo/issues...` URLs are also accepted. Identifiers
 must be valid for the operation; a comment ID is its numeric database ID.
 
+`github://issues` and `github://pulls` have no HTTPS form and are the only
+URIs that omit the repository. They resolve the current cwd's Git origin when
+opened, then every window showing the buffer is replaced with the matching
+list. If you leave the buffer before the origin is resolved, nothing else
+happens. If resolution fails, an error is shown and the empty read-only buffer
+stays open; run |:edit| to retry.
+
 URI                                                          Action
 ----------------------------------------------------------------------------
+github://issues                                               Issue list of
+                                                              the cwd's origin
+github://pulls                                                PR list of the
+                                                              cwd's origin
 github://{owner}/{repo}/issues                                Issue list
+github://{owner}/{repo}/pulls                                 PR list
 github://{owner}/{repo}/issues/new                            Create Issue
 github://{owner}/{repo}/issues/{number}                       Edit Issue body
 github://{owner}/{repo}/issues/{number}/assignees             Edit assignees
@@ -158,6 +170,7 @@ ignored after a newer request or when the owning buffer is unloaded.
 
 ISSUE LIST                                        *github-buffer-issue-list*
 
+github://issues
 github://{owner}/{repo}/issues
     Open the repository's Issues with the initial condition state:open.
     At most 30 Issues are shown in GitHub's returned order. The columns are
@@ -325,6 +338,7 @@ PULL REQUEST LIST                                    *github-buffer-pull-list*
 
     :GitHub pulls
     :GitHub pulls owner/repo
+    :edit github://pulls
     :edit github://owner/repo/pulls
     :edit https://github.com/owner/repo/pulls
 
