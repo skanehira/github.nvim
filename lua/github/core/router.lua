@@ -11,11 +11,7 @@ local features = {
   comment_create = "github.features.comments.create",
   comment_edit = "github.features.comments.edit",
 }
-local current_repository_lists = {
-  ["github://issues"] = "issue_list",
-  ["github://pulls"] = "pull_list",
-}
-local function open_current_repository_list(buf, kind)
+local function open_current_repository(buf, target)
   vim.bo[buf].buftype = "nofile"
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].swapfile = false
@@ -32,7 +28,7 @@ local function open_current_repository_list(buf, kind)
       if not resolved then
         return vim.notify("Cannot resolve repository in " .. cwd .. ": " .. err, vim.log.levels.ERROR)
       end
-      resolved.kind = kind
+      resolved.kind, resolved.issue_number, resolved.comment_id = target.kind, target.issue_number, target.comment_id
       local name = uri.format(resolved)
       for _, win in ipairs(vim.fn.win_findbuf(buf)) do
         local ok, open_err = pcall(vim.api.nvim_win_call, win, function()
@@ -90,9 +86,9 @@ function M.setup()
     group = group,
     pattern = "github://*",
     callback = function(event)
-      local kind = current_repository_lists[vim.api.nvim_buf_get_name(event.buf)]
-      if kind then
-        return open_current_repository_list(event.buf, kind)
+      local target = uri.parse_current_repository(vim.api.nvim_buf_get_name(event.buf))
+      if target then
+        return open_current_repository(event.buf, target)
       end
       dispatch(event, "read")
     end,

@@ -72,6 +72,11 @@ function M.parse(value)
   return target
 end
 
+function M.parse_current_repository(value)
+  local resource, tail = value:match("^github://([^/]+)(.*)$")
+  return resource and parse_resource(resource, tail) or nil
+end
+
 function M.format(target)
   if target.kind == "pull_list" then
     return "github://" .. target.owner .. "/" .. target.repo .. "/pulls"

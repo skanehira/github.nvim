@@ -151,9 +151,18 @@ describe("supported URI dispatch", function()
   end)
 end)
 
-describe("repository-relative list URIs", function()
+describe("repository-relative URIs", function()
   local process = require("github.core.process")
   local old_run, old_notify, runs, notices, seen
+  local feature_modules = {
+    "github.features.issues.list",
+    "github.features.issues.create",
+    "github.features.issues.edit",
+    "github.features.issues.attributes",
+    "github.features.comments.list",
+    "github.features.comments.create",
+    "github.features.comments.edit",
+  }
   local function resolve_origin(argv, opts, cb)
     runs[#runs + 1] = { argv = argv, cwd = opts.cwd }
     vim.schedule(function()
@@ -189,28 +198,43 @@ describe("repository-relative list URIs", function()
     vim.notify = function(message, level)
       notices[#notices + 1] = { message, level }
     end
-    package.loaded["github.features.issues.list"] = {
-      read = function(buf, target)
-        seen[#seen + 1] = target
-        vim.bo[buf].buftype = "acwrite"
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "loaded" })
-        vim.bo[buf].modified = false
-      end,
-    }
+    for _, name in ipairs(feature_modules) do
+      package.loaded[name] = {
+        read = function(buf, target)
+          seen[#seen + 1] = target
+          vim.bo[buf].buftype = "acwrite"
+          vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "loaded" })
+          vim.bo[buf].modified = false
+        end,
+      }
+    end
     vim.cmd("runtime plugin/github.lua")
   end)
   after_each(function()
     process.run, vim.notify = old_run, old_notify
     vim.cmd("silent! %bwipeout!")
-    package.loaded["github.features.issues.list"] = nil
+    for _, name in ipairs(feature_modules) do
+      package.loaded[name] = nil
+    end
   end)
 
-  for _, case in ipairs({ { "issues", "issue_list" }, { "pulls", "pull_list" } }) do
-    it("replaces github://" .. case[1] .. " with the list of the origin repository", function()
+  for _, case in ipairs({
+    { "issues", { kind = "issue_list" } },
+    { "pulls", { kind = "pull_list" } },
+    { "issues/new", { kind = "issue_create" } },
+    { "issues/42", { kind = "issue_edit", issue_number = 42 } },
+    { "issues/42/assignees", { kind = "issue_assignees", issue_number = 42 } },
+    { "issues/42/labels", { kind = "issue_labels", issue_number = 42 } },
+    { "issues/42/comments", { kind = "comment_list", issue_number = 42 } },
+    { "issues/42/comments/new", { kind = "comment_create", issue_number = 42 } },
+    { "issues/42/comments/123", { kind = "comment_edit", issue_number = 42, comment_id = 123 } },
+  }) do
+    it("replaces github://" .. case[1] .. " with the same target in the origin repository", function()
       vim.cmd("edit github://" .. case[1])
       wait_for_current_name("github://a/r/" .. case[1])
       assert.equals(-1, vim.fn.bufnr("github://" .. case[1]))
-      assert.same({ { kind = case[2], host = "github.com", owner = "a", repo = "r" } }, seen)
+      local expected = vim.tbl_extend("error", case[2], { host = "github.com", owner = "a", repo = "r" })
+      assert.same({ expected }, seen)
       assert.same({
         { argv = { "git", "rev-parse", "--show-toplevel" }, cwd = vim.fn.getcwd() },
         { argv = { "git", "remote", "get-url", "origin" }, cwd = vim.fn.getcwd() },
