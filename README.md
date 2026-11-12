@@ -38,7 +38,7 @@ Or specify a repository without a local checkout:
 
 Both lists initially show open items, up to 30 results. Press `ghs` and use `state:closed` for closed items or `is:merged` for merged PRs. Pull request lists support `ghs`, `K`, `<C-j>` / `<C-k>`, `ghy`, and `<C-o>`; PR editing and review are future work.
 
-Direct `:edit github://owner/repo/issues` and `:edit github://owner/repo/pulls` work too, as do their corresponding GitHub HTTPS URLs. `:edit github://issues` and `:edit github://pulls` resolve the current directory's Git origin and replace the buffer with `github://owner/repo/issues` or `github://owner/repo/pulls`. If the origin cannot be resolved, an error is shown and the empty buffer stays open; run `:edit` to retry.
+Direct `:edit github://owner/repo/issues` and `:edit github://owner/repo/pulls` work too, as do their corresponding GitHub HTTPS URLs.
 
 | Key | Issue list | Comment list |
 | --- | --- | --- |
@@ -61,8 +61,6 @@ Use `:write` to save an editing buffer. Issue creation offers Markdown templates
 Public buffers:
 
 ```text
-github://issues
-github://pulls
 github://owner/repo/issues
 github://owner/repo/pulls
 github://owner/repo/issues/new
@@ -75,6 +73,8 @@ github://owner/repo/issues/123/comments/456
 ```
 
 Assignees and labels use one name per line; an empty buffer clears the attribute. The final comment path uses a numeric comment database ID.
+
+Every public buffer can omit `owner/repo/`, for example `:edit github://issues`, `:edit github://pulls`, or `:edit github://issues/123/comments`. The current directory's Git origin is resolved and the buffer is replaced with the same form under `github://owner/repo/`. If the origin cannot be resolved, an error is shown and the empty buffer stays open; run `:edit` to retry. The HTTPS URLs cannot omit the repository.
 
 Find the first PR associated with a commit:
 

@@ -9,7 +9,7 @@ UC-002の利用者操作を実現する。対象規則はBR-006, BR-007, BR-008,
 
 ## 入出力と振る舞い
 
-- `github://owner/repo/issues`と対応するHTTPS URLから一覧を開く。`github://issues`はcwdのGit originから解決した`github://owner/repo/issues`へ置き換わる。bufferごとにhost/owner/repo、最後に成功した検索条件、表示行とIssueの対応、各IssueのGraphQL node ID、選択、要求世代を保持する。状態変更時は行に対応するIDを状態変更機能へ渡す。IDを取得できないIssueは状態変更の際に対象ごとに理由を報告し、そのIssueへの更新を送らない。
+- `github://owner/repo/issues`と対応するHTTPS URLから一覧を開く。owner/repoを省いた`github://issues`は、cwdのGit originから解決した`github://owner/repo/issues`へ置き換わる (DESIGN.md「CLI・公開インターフェース」)。bufferごとにhost/owner/repo、最後に成功した検索条件、表示行とIssueの対応、各IssueのGraphQL node ID、選択、要求世代を保持する。状態変更時は行に対応するIDを状態変更機能へ渡す。IDを取得できないIssueは状態変更の際に対象ごとに理由を報告し、そのIssueへの更新を送らない。
 - 初回の`state:open`は最大30件。番号・タイトル・状態・担当者・ラベル・コメント総数の順にコンパクトな列を表示し、GitHub検索の返却順を保つ。コメント総数は取得したコメント配列の長さではなくtotalCountを使う。
 - 番号・OPEN/CLOSED・担当者・ラベルと選択印にハイライトを付ける。移植元の `gh_issue_number`、`gh_issue_open`、`gh_issue_closed`、`gh_issue_user`、`gh_issue_labels` を使い、カラースキーム変更時も既定色を定義する。
 - 番号、タイトル、OPEN/CLOSED、`@担当者`、`(ラベル)`、` コメント総数`を表示幅で整列する。表示するタイトルは100桁までで超過時は`...`を付け、担当者は先頭2名、ラベルは先頭3件に制限する。内部の対象情報と属性は全件保持し、日本語の表示幅と固定2桁の選択印を考慮する。
