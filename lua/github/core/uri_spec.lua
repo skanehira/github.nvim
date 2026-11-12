@@ -40,6 +40,9 @@ describe("GitHub URI parsing", function()
       "https://github.com/owner/repo/pulls/1",
       "github://owner/repo/issuespull_list",
       "github://owner/repo/pulls/new",
+      "github://-owner/repo/issues",
+      "github://own.er/repo/issues",
+      "github://owner/re po/issues",
     }
     for _, value in ipairs(cases) do
       local parsed, err = uri.parse(value)
