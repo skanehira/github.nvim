@@ -40,11 +40,41 @@ describe("GitHub URI parsing", function()
       "https://github.com/owner/repo/pulls/1",
       "github://owner/repo/issuespull_list",
       "github://owner/repo/pulls/new",
+      "github://-owner/repo/issues",
+      "github://own.er/repo/issues",
+      "github://owner/re po/issues",
     }
     for _, value in ipairs(cases) do
       local parsed, err = uri.parse(value)
       assert.is_nil(parsed)
       assert.equals("unsupported GitHub URI", err)
+    end
+  end)
+end)
+
+describe("GitHub URIs without owner and repo", function()
+  it("maps every owner-less form to its target and leaves other names unparsed", function()
+    local cases = {
+      { "github://issues", { kind = "issue_list" } },
+      { "github://pulls", { kind = "pull_list" } },
+      { "github://issues/new", { kind = "issue_create" } },
+      { "github://issues/42", { kind = "issue_edit", issue_number = 42 } },
+      { "github://issues/42/assignees", { kind = "issue_assignees", issue_number = 42 } },
+      { "github://issues/42/labels", { kind = "issue_labels", issue_number = 42 } },
+      { "github://issues/42/comments", { kind = "comment_list", issue_number = 42 } },
+      { "github://issues/42/comments/new", { kind = "comment_create", issue_number = 42 } },
+      { "github://issues/42/comments/123", { kind = "comment_edit", issue_number = 42, comment_id = 123 } },
+      { "github://issues/0" },
+      { "github://issues/42/unknown" },
+      { "github://issues/42/comments/0" },
+      { "github://pulls/1" },
+      { "github://issuesx" },
+      { "github://issues/repo/issues" },
+      { "github://owner/repo/issues/42" },
+      { "https://github.com/issues/42" },
+    }
+    for _, case in ipairs(cases) do
+      assert.same(case[2], uri.parse_current_repository(case[1]))
     end
   end)
 end)

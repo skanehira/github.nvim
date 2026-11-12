@@ -16,23 +16,9 @@ local function positive(value)
   return n and n > 0 and n <= 9007199254740991 and n == math.floor(n)
 end
 
-function M.parse(value)
-  if type(value) ~= "string" then
-    return nil, "unsupported GitHub URI"
-  end
-  local path = value:match("^github://(.+)$") or value:match("^https://github%.com/(.+)$")
-  local owner, repo, resource, tail
-  if path then
-    owner, repo, resource, tail = path:match("^([^/]+)/([^/]+)/([^/]+)(.*)$")
-  end
-  if
-    not owner
-    or not owner:match("^[%w][%w%-]*$")
-    or not repo:match("^[%w_.%-]+$")
-    or (resource ~= "issues" and resource ~= "pulls")
-    or (resource == "pulls" and tail ~= "")
-  then
-    return nil, "unsupported GitHub URI"
+local function parse_resource(resource, tail)
+  if (resource ~= "issues" and resource ~= "pulls") or (resource == "pulls" and tail ~= "") then
+    return nil
   end
   local kind, issue, comment
   if resource == "pulls" then
@@ -64,9 +50,31 @@ function M.parse(value)
     end
   end
   if not kind then
+    return nil
+  end
+  return { kind = kind, issue_number = issue, comment_id = comment }
+end
+
+function M.parse(value)
+  if type(value) ~= "string" then
     return nil, "unsupported GitHub URI"
   end
-  return { kind = kind, host = "github.com", owner = owner, repo = repo, issue_number = issue, comment_id = comment }
+  local path = value:match("^github://(.+)$") or value:match("^https://github%.com/(.+)$")
+  local owner, repo, resource, tail
+  if path then
+    owner, repo, resource, tail = path:match("^([^/]+)/([^/]+)/([^/]+)(.*)$")
+  end
+  local target = owner and owner:match("^[%w][%w%-]*$") and repo:match("^[%w_.%-]+$") and parse_resource(resource, tail)
+  if not target then
+    return nil, "unsupported GitHub URI"
+  end
+  target.host, target.owner, target.repo = "github.com", owner, repo
+  return target
+end
+
+function M.parse_current_repository(value)
+  local resource, tail = value:match("^github://([^/]+)(.*)$")
+  return resource and parse_resource(resource, tail) or nil
 end
 
 function M.format(target)
