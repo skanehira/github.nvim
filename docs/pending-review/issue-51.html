@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>保留レビュー項目: issue #51</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 960px; line-height: 1.6; color: #1f2328; }
+  h1 { font-size: 1.4rem; }
+  .item { border: 1px solid #d0d7de; border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+  .item h2 { font-size: 1rem; margin: 0 0 .5rem; }
+  .meta { color: #57606a; font-size: .85rem; }
+  .severity-medium { border-left: 4px solid #bf8700; }
+  dl { display: grid; grid-template-columns: 8rem 1fr; gap: .25rem 1rem; margin: .75rem 0 0; }
+  dt { font-weight: 600; }
+  dd { margin: 0; }
+  code { background: #f6f8fa; padding: .1rem .3rem; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>保留レビュー項目: issue #51（Projects のフィールド編集）</h1>
+<p>dev-impl のレビューで medium と判定され、merge を止めずに事後確認へ回した項目です。チェックして対応したら、このファイルを削除してください。</p>
+<section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>編集画面を再利用したとき、開いている選択肢/入力の子画面を閉じないため、再利用後の子画面が&lt;CR&gt;を無言で無視する（stale な dead screen が残る）</h2>
+  <p class="meta">medium / spec-compliance / <code>lua/github/features/projects/field_edit.lua:600</code></p>
+  <dl>
+    <dt>summary</dt><dd>編集画面を再利用したとき、開いている選択肢/入力の子画面を閉じないため、再利用後の子画面が&lt;CR&gt;を無言で無視する（stale な dead screen が残る）</dd>
+    <dt>evidence</dt><dd>再利用経路 (field_edit.lua:600-609) は state.generation を +1 して render_editor するだけで、編集画面の子画面を閉じない。選択肢画面は開いた時点の generation を保持し (field_edit.lua:215)、apply は state.generation ~= generation で無言 return する (273-275)。入力画面も同様 (374, 383-385)。設計 projects-field-edit.md:20 は「既存の編集画面を再利用し、選択項目に合わせて内容を更新する」とし、エッジケースに「編集画面の再利用」(92) を挙げるが、子画面の扱いは未定義。既存テスト field_edit_spec.lua:1075-1100 は再利用前に q で選択肢を閉じており (1082)、子画面を開いたままの再利用を固定していない。同じ形の箇所の走査: 編集画面の子画面は選択肢と入力の2つで、両方とも同じ generation 判定により再利用後に &lt;CR&gt; が無言 return する（2/2 該当）。board.lua の再利用 (board.lua:780-783) も子画面を閉じないが、プレビュー/ヘルプ/フィルタ入力は generation で無効化されず操作が生きているため、同じ判定ではない（該当せず）。</dd>
+    <dt>fix_hint</dt><dd>再利用時に編集画面の子画面（選択肢・入力）を閉じる（編集画面 state に開いている子画面の名前/meta を保持して close する）。子画面を開いたまま ghe で再利用するテストを追加し、子画面が閉じ、&lt;CR&gt; が無視されないことを固定する。</dd>
+  </dl>
+</section>
+</body>
+</html>
