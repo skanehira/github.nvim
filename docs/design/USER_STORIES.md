@@ -1,6 +1,8 @@
 <!-- 変更履歴 [2026-10-28]: 全12UCの受け入れ基準からストーリーの実現UCを書き戻し -->
 <!-- 変更履歴 [2026-10-28]: 公開URIをgithub://へ統一 -->
 <!-- 変更履歴 [2026-10-28]: 将来のActions・レビュー統合とgh経由のGitHub通信を設計条件に追加 -->
+<!-- 変更履歴 [2026-11-12]: Projects v2の閲覧・編集 (US-020〜US-023, UC-014〜UC-017) を追加 -->
+<!-- 変更履歴 [2026-11-13]: PR一覧の閲覧 (US-024, UC-018) をMustへ追加 -->
 # github.nvim ユーザーストーリー
 
 - 種別: ユーザーストーリー
@@ -16,6 +18,18 @@ denops-gh.vimの実装済み機能を、Neovim向けLuaプラグインgithub.nvi
 
 機能を引き継ぐことと、移植元の取得上限や不具合をそのまま引き継ぐことは区別する。表示件数、異常時の挙動、公開インターフェースの互換範囲はユースケース・技術検証・設計で具体化する。本書はユーザーができることを定める。
 
+2026-11-12に、GitHub Projects v2（Projectのボード表示と項目編集）を追加する。Projectの一覧とボードをNeovimのfloatウィンドウで表示し、列と項目をキー操作でたどり、ステータスなどのフィールド編集、項目の追加・削除を行う。対象は認証済みユーザーとアクセス権のあるOrgのProjectとし、表示は単一選択フィールド（既定はStatus）の選択肢で列に分けたカンバンとする。
+
+## Projects機能の追加 (2026-11-12)
+
+利用者の指定により、既存のIssue機能へGitHub Projects v2の閲覧・編集を追加する。既存の16件のストーリーと12件のユースケースは維持し、Projects向けにUS-020〜US-023とUC-014〜UC-017を追加する。
+
+- **対象**: 認証済みユーザーと、アクセス権のあるOrgのProject。ownerを省略した場合は認証済みユーザーを対象にする。
+- **UI**: Project一覧とボードはfloatウィンドウで表示する。ボードは単一選択フィールドの選択肢ごとに列を作るカンバンとし、列幅を固定して横スクロールする。google-calendar.nvimのfloat画面の構成（ウィンドウのスタック、画面比率、中央配置、リサイズ、`q`/`<Esc>`で閉じる操作）を参考にする。カレンダー固有の表示は要件にしない。
+- **範囲**: ボードの閲覧、項目の本文プレビュー、Issueバッファ・ブラウザへの移動、URLコピー、フィルタ、フィールド編集（単一選択・テキスト・数値・日付）、項目の追加（既存Issue/PR・下書きIssue）と削除。
+- **範囲外**: ビューの切替・保存、項目の並び順変更、アーカイブ、下書きIssueの追加後の本文編集、複数選択・イテレーションのフィールド、Project・フィールド自体の作成/編集/削除、マウス操作、キーマップ変更、Projectsの`github://` URI。
+- **GitHub通信**: 既存の方針どおり`gh api`を使い、認証はghに委ねる。Projectの参照と変更には、ghの認証に`project`スコープが必要になる場合がある。
+
 ## 将来の統合とGitHub通信の設計条件
 
 将来、次のプラグインの機能をgithub.nvimへ統合する。
@@ -25,7 +39,7 @@ denops-gh.vimの実装済み機能を、Neovim向けLuaプラグインgithub.nvi
 | github-actions.nvim | Actionsのバージョン確認、実行、履歴、ログ、監視など | 共通基盤の設計条件として参照し、機能移植は将来行う。 |
 | review.nvim | ローカル差分・PRのレビュー、コメント下書き、レビューセッションなど | 共通基盤の設計条件として参照し、機能移植は将来行う。 |
 
-初期版の16件のストーリーと、合意済みの12件のユースケースの範囲を維持する。以下の条件を、ユースケース、実現可能性検証、横断設計、機能設計へ引き継ぐ。
+初期版の16件のストーリーと合意済みの12件のユースケースの範囲を維持し、Projects向けに4件のストーリーと4件のユースケースを追加する。以下の条件を、ユースケース、実現可能性検証、横断設計、機能設計へ引き継ぐ。
 
 1. **GitHub通信はghを使う。** denops-gh.vim由来の機能を含め、GitHub APIの呼び出しは`gh api`を利用する。RESTとGraphQLの両方を対象とし、認証情報の取得・管理はghに委ねる。対話を伴うIssue作成などのghサブコマンドも、共通の外部コマンド実行処理を通す。
 2. **機能別に初期化・設定・状態を分ける。** Issue、Actions、レビューを独立した機能領域として扱う。GitHub通信に必要なghの導入・認証確認は、その機能を利用する時点で行う。将来のローカル差分レビューは、GitHub認証なしで利用できる性質を保つ。
@@ -52,6 +66,7 @@ denops-gh.vimの実装済み機能を、Neovim向けLuaプラグインgithub.nvi
 4. コメントでの会話
 5. GitHubとの行き来
 6. コミットとPRの関連確認
+7. Projectsの閲覧と編集
 
 ## ストーリー一覧
 
@@ -219,6 +234,56 @@ denops-gh.vimの実装済み機能を、Neovim向けLuaプラグインgithub.nvi
 
 **エピック**: コミットとPRの関連確認
 
+#### US-020: オーナーのProjectを一覧し、ボードを開ける
+
+- **開発者として**
+- **認証済みユーザーまたはOrgのProjectを一覧し、選んだProjectのボードをNeovimのfloatウィンドウで開きたい**
+- **なぜなら** リポジトリをまたぐ作業の進み具合を、エディタを離れずに確認したいから
+
+**実現するユースケース**: UC-014
+
+**エピック**: Projectsの閲覧と編集
+
+#### US-021: ボードで項目を閲覧し、IssueやPRへ移動できる
+
+- **開発者として**
+- **カンバンの列と項目をキー操作でたどり、項目の本文をプレビューし、対応するIssueやPRを開きたい**
+- **なぜなら** どの項目に着手するかをボード上で判断し、そのまま作業へ移りたいから
+
+**実現するユースケース**: UC-015
+
+**エピック**: Projectsの閲覧と編集
+
+#### US-022: 項目のフィールドを編集できる
+
+- **開発者として**
+- **ボードの項目のステータスや優先度などのフィールドをNeovimで変更したい**
+- **なぜなら** 作業の進み具合を、GitHubの画面へ移らずに更新したいから
+
+**実現するユースケース**: UC-016
+
+**エピック**: Projectsの閲覧と編集
+
+#### US-023: ボードに項目を追加・削除できる
+
+- **開発者として**
+- **既存のIssue/PRまたは下書きIssueをProjectへ追加し、不要な項目をProjectから削除したい**
+- **なぜなら** 作業の計画をボード上でまとめ、Projectの対象を整理したいから
+
+**実現するユースケース**: UC-017
+
+**エピック**: Projectsの閲覧と編集
+
+#### US-024: リポジトリのPR一覧を閲覧できる
+
+- **開発者として**
+- **リポジトリのPR一覧をNeovimで開き、PRの状態・担当者・ラベル・コメント数を確認したい**
+- **なぜなら** 作業中のPRの状況を、エディタを離れずに把握したいから
+
+**実現するユースケース**: UC-018
+
+**エピック**: PR一覧の閲覧
+
 ### Should（重要）
 
 該当なし。入力補完を除く実装済み機能の移植を初期版の必須範囲として合意している。
@@ -232,7 +297,7 @@ denops-gh.vimの実装済み機能を、Neovim向けLuaプラグインgithub.nvi
 | 番号 | ストーリー | やらない理由 |
 | --- | --- | --- |
 | — | Vimでも利用する | 今回はNeovim向けLuaプラグインへの移植を対象とするため。 |
-| — | PRを一覧表示・編集・レビューする | 初期版はIssue操作を移植する。レビュー機能は将来review.nvimから統合する。コミットに関連するPRのURL確認はUS-019で扱う。 |
+| — | PRを編集・レビューする | 初期版はPR一覧の閲覧に限定し、レビュー機能は将来review.nvimから統合する。コミットに関連するPRのURL確認はUS-019で扱う。 |
 | — | GitHub Actionsを操作する | 初期版の移植範囲から外し、将来github-actions.nvimから統合するため。 |
 | — | リポジトリのREADMEを専用画面で読む | 移植元ではTODOのため。 |
 | — | リポジトリのファイル一覧を閲覧する | 移植元ではTODOのため。 |
@@ -242,17 +307,26 @@ denops-gh.vimの実装済み機能を、Neovim向けLuaプラグインgithub.nvi
 | US-016 | 本文中のIssue番号を補完できる | 補完機能は今回は不要という利用者の指示により対象外とするため。 |
 | US-017 | ユーザー名を補完できる | 補完機能は今回は不要という利用者の指示により対象外とするため。 |
 | US-018 | ラベル名や検索条件の値を補完できる | 補完機能は今回は不要という利用者の指示により対象外とするため。 |
+| — | Projectのビューを切り替える、またはビューの設定を保存する | 初期版は先頭ビューのフィルタを初期条件として使うだけにし、ビュー管理は対象外とするため。 |
+| — | Projectの項目の並び順を変更する | 初期版はGitHubの項目位置順で表示し、並び替えは対象外とするため。 |
+| — | Projectの項目をアーカイブ・アンアーカイブする | 初期版はアーカイブ済み項目を表示せず、アーカイブ操作は対象外とするため。 |
+| — | 下書きIssueのタイトル・本文を追加後に編集する | 追加時の入力だけを対象とし、追加後の下書き編集は対象外とするため。 |
+| — | 複数選択・イテレーションのフィールドを編集する | 初期版は単一選択・テキスト・数値・日付のフィールドに限定するため。 |
+| — | Project・フィールド自体を作成・編集・削除する | 初期版は既存Projectの閲覧と項目編集に限定するため。 |
+| — | ボードをマウスで操作する | 初期版はキー操作に限定するため。 |
+| — | Projects機能のキーマップを変更する | 初期版は固定キーマップとし、`<Plug>`マッピングを公開しないため。 |
+| — | `github://` URIでProjectを開く | Projectsはfloatウィンドウの画面であり、バッファURIの入口を持たないため。 |
 
 ## 優先順位サマリー
 
 | 優先度 | ストーリー数（件） |
 | ------ | ------------------ |
-| Must   | 16                 |
+| Must   | 21                 |
 | Should | 0                  |
 | Could  | 0                  |
-| Won't  | 11                 |
+| Won't  | 20                 |
 
-Mustの比率は、入力補完を除く既存機能の移植という合意による。実装順やIssueの分割単位を表すものではない。
+Mustの比率は、入力補完を除く既存機能の移植とProjects v2の閲覧・編集、PR一覧の閲覧という合意による。実装順やIssueの分割単位を表すものではない。
 
 ## 移植時に引き継ぐ操作
 
@@ -264,6 +338,27 @@ Mustの比率は、入力補完を除く既存機能の移植という合意に�
 | コメントを読む・投稿・編集する            | `ghm`で一覧を開き、`ghn`で投稿、`ghe`で編集する。移植元のコメントを指定するURIも後続設計で整理する。                                                           | US-011〜US-013                 |
 | 選択・プレビュー・ブラウザ起動・URLコピー | `C-j`・`C-k`で複数選択、`K`で本文プレビュー、`C-o`でブラウザ、`ghy`でURLコピー。複数選択が可能な操作の範囲は移植元を基本にする。                               | US-004、US-008、US-014、US-015 |
 | 関連PRのURL確認                           | 移植元の`GhGetAssociatedPullRequest`。                                                                                                                         | US-019                         |
+
+## Projects機能の操作 (2026-11-12)
+
+| 操作 | 入口・挙動 | 対応ストーリー |
+| --- | --- | --- |
+| Project一覧を開く | `:GitHub projects [owner]`。owner省略時は認証済みユーザー、owner指定時はユーザーまたはOrg。floatウィンドウに開いているProjectを表示する。 | US-020 |
+| ボードを開く | 一覧で`<CR>`、または`:GitHub projects <owner> <number>`。floatウィンドウに単一選択フィールドの選択肢で列を作る。 | US-020、US-021 |
+| ボードをたどる | `h`/`l`で列、`j`/`k`で項目、`H`/`L`で先頭/末尾の列、`g`/`G`で先頭/末尾の項目。`K`で本文プレビュー、`<CR>`でIssueバッファ・PRのブラウザ・下書きプレビュー、`<C-o>`でブラウザ、`ghy`でURLコピー。 | US-021 |
+| フィルタ | `ghs`でGitHubのProjectフィルタを入力し、Enterで適用、空で解除する。初期条件は先頭ビューのフィルタとする。 | US-021 |
+| フィールド編集 | `ghe`で編集可能なフィールド（単一選択・テキスト・数値・日付）を選び、値を変更または解除する。 | US-022 |
+| 項目の追加・削除 | `ghn`で既存Issue/PRまたは下書きIssueを追加し、`ghd`で確認してProjectから削除する。 | US-023 |
+| 再取得・ヘルプ・終了 | `r`で再取得、`?`でヘルプ、`q`/`<Esc>`で閉じる。 | US-020、US-021 |
+
+## PR一覧の操作 (2026-11-13)
+
+| 操作 | 入口・挙動 | 対応ストーリー |
+| --- | --- | --- |
+| PR一覧を開く | `:GitHub pulls [owner/repo]`または`github://owner/repo/pulls`。owner/repo省略時はGitのorigin。バッファにPRを表示する。 | US-024 |
+| PRをたどる | `j`/`k`、`<C-j>`/`<C-k>`、`gg`/`G`。`K`で本文プレビュー、`<C-o>`でブラウザ、`ghy`でURLコピー。選択はURL操作後に解除される。 | US-024 |
+| フィルタ | `ghs`で検索条件を入力し、Enterで適用。空または変更なしは送信しない。 | US-024 |
+| 再取得・ヘルプ | `:edit!`で再取得、キー一覧は`doc/github.txt`。一覧は`:bwipeout`で閉じる。 | US-024 |
 
 ## 依拠する外部事実
 
@@ -285,3 +380,22 @@ Mustの比率は、入力補完を除く既存機能の移植という合意に�
 | review.nvim | `/Users/skanehira/dev/github.com/skanehira/review.nvim`、コミット`3e78a1eab4189e5b5bef9c826dd06fdd8c203c18`。`docs/design/DESIGN.md`、`docs/design/features/pr-comments.md`、`lua/review/git/cli.lua`、`lua/review/git/gh.lua`、`lua/review/store/paths.lua` | ghを必要とするPR機能とローカル差分レビューの区別、GitHubの対象とworktreeの分離、レビュー固有の下書きと永続セッションの管理。 |
 
 上表のファイルパスは、同じ行に記載した各リポジトリのルートからの相対パスを表す。
+
+### Projects機能の参照元 (2026-11-12)
+
+| 対象 | 確認元 | 本書への反映 |
+| --- | --- | --- |
+| float画面の構成 | `/Users/skanehira/dev/github.com/skanehira/google-calendar.nvim`、コミット`53645a6ce448e0da9d7ca0d6a4ce412ac52cea9a`。`lua/google-calendar/ui/window.lua`、`month_view.lua`、`agenda.lua`、`detail.lua` | floatウィンドウのスタック、画面比率、中央配置、リサイズ、`q`/`<Esc>`で閉じる操作の参考。カレンダー固有の表示は要件にしない。 |
+| Projects v2のデータとフィルタ | [Projectsのフィールド](https://docs.github.com/en/issues/planning-and-tracking-with-projects/understanding-fields)、[Projectsのフィルタ](https://docs.github.com/en/issues/planning-and-tracking-with-projects/customizing-views-in-your-project/filtering-projects) | 列に使う単一選択フィールド、項目のフィールド値、フィルタ構文の参照元。 |
+| GraphQL API | [ProjectV2](https://docs.github.com/en/graphql/reference/objects#projectv2)、[ProjectV2Item](https://docs.github.com/en/graphql/reference/objects#projectv2item)、[Projectsのmutation](https://docs.github.com/en/graphql/reference/mutations) | 一覧・ボード・編集の読取と更新契約。 |
+| ghのProjects操作 | [gh project](https://cli.github.com/manual/gh_project) | ownerの指定、項目一覧の取得、フィルタ指定の参考。 |
+| 実測結果 | `docs/design/FEASIBILITY.md`の`projects-api`と`float-board`（2026-11-12） | 読取・書込の契約、ページング、フィルタ、float描画と操作の成立。 |
+
+### PR一覧機能の参照元 (2026-11-13)
+
+| 対象 | 確認元 | 本書への反映 |
+| --- | --- | --- |
+| 既存のIssue一覧 | `docs/design/features/issue-list.md` | 検索・バッファ・描画・キーマップ・非同期要求の基盤を再利用する。 |
+| GraphQL searchのPullRequest | [PullRequest](https://docs.github.com/en/graphql/reference/objects#pullrequest)、[SearchResultItem](https://docs.github.com/en/graphql/reference/unions#searchresultitem) | `type:pr`の検索、PullRequestのnumber/title/state/body/url/repository/comments/assignees/labelsの取得。 |
+| ghの検索 | [gh search prs](https://cli.github.com/manual/gh_search_prs) | 検索条件とPR固有の表示項目の参考。 |
+| 実測結果 | `docs/design/FEASIBILITY.md`の`pulls-search`（2026-11-13） | `type:pr`検索とPR固有フィールドの取得。 |

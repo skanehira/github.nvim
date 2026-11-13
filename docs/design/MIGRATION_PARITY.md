@@ -70,10 +70,18 @@
 | 空Issue本文を保存可能 | 合意済み。タイトルとコメントの空白入力拒否は維持。 |
 | コピーの完了を断定しない | 利用者承認済み。providerから完了を確認できない場合は要求件数と結果未確認を案内。 |
 | 作成の非0終了でも未作成と断定しない | ghが作成済みでも添付等で失敗しうるため、URLと結果不明を案内し自動再送しない。 |
-| Pulls/README/files/Gist/Actions、コメント削除、画面ページ送りなし | 元ではTODOまたは未実装。将来のActions・レビュー統合の対象を今回へ追加しない。 |
+| README/files/Gist/Actions、コメント削除、画面ページ送りなし | 元ではTODOまたは未実装。将来のActions・レビュー統合の対象を今回へ追加しない。PR一覧はUS-024で新規に追加し、移植対象外とする。 |
 
 ## 検証と限界
 
-現行Neovimと最低対応版0.10.4の双方で181シナリオが成功。`make lint`・`make check`、pluginファイルの追加lint/format検査は成功し、警告0件。helpタグ生成と公開タグへのジャンプ、受け入れ基準の被覆、差分の空白検査も成功した。
+最低対応版0.10.4で181シナリオが成功。現行のNeovim 0.13.0-nightlyでは`create_spec.lua`の端末チャネル検証が失敗するため、0.13 nightlyの全件成功は主張しない。`make lint`・`make check`、pluginファイルの追加lint/format検査は成功し、警告0件。helpタグ生成と公開タグへのジャンプ、受け入れ基準の被覆、差分の空白検査も成功した。
 
 `make test`、`make lint`、`make check`とNeovim 0.10.4での結合テストを実行する。さらに実GitHubの`skanehira/github.nvim`に対し、実URI→検索1行バッファ→`state:closed`確定→27件の表示→`K`の反復を読み取り専用で確認した。この実行ではハイライト範囲81件、プレビュー窓の再利用、一覧フォーカスの維持を確認した。Neovimの実バッファ・窓・キー・イベント・extmarkを検証し、自動テストのGitHub通信・ブラウザ・クリップボードproviderは注入した実行器やfakeを使う。Issue作成は実Neovim terminal＋fake ghを含む。実GitHubへのIssue・コメントの作成や更新、実ブラウザ起動・実クリップボード変更は検証で行わない。画像による視覚比較と移植元Denopsの実行比較は未実施であり、元ソースとの静的比較とLua版の実動作検証を区別する。
+
+## Projects機能（移植対象外）
+
+Projects v2の閲覧・編集はdenops-gh.vimの移植対象ではない。google-calendar.nvimのfloat UIを参考に追加した新規機能であり、比較基準の`989f2d1ebf7d414ad8aa4d415a326caca836d30a`には対応する操作がない。Projectsの設計はDESIGN.mdと`docs/design/features/projects-*.md`を正本とし、この対応表の欠落・差分には含めない。
+
+## PR一覧機能（移植対象外）
+
+PR一覧はdenops-gh.vimの移植対象ではなく、US-024/UC-018で新規に追加した閲覧機能である。比較基準の`989f2d1ebf7d414ad8aa4d415a326caca836d30a`には対応する操作がない。設計はDESIGN.mdと`docs/design/features/pulls.md`を正本とし、この対応表の欠落・差分には含めない。PRの編集・レビュー・コメント投稿は対象外とする。

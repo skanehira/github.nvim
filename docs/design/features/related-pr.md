@@ -9,7 +9,7 @@
 
 ## 入出力と振る舞い
 
-`:GhGetAssociatedPullRequest <commit>`または`:GhGetAssociatedPullRequest <owner> <repo> <commit>`を受ける。commitは必須。対象hostはgithub.comのみ。3引数はgithub.comのリポジトリを指定し、Git checkout不要。1引数は操作開始時cwdのoriginからhost/owner/repoを解決し、github.com以外なら対応していないhostを案内して照会せず拒否する。関連PRの先頭1件のURLを表示し、commitなし・対象なし・エラーは区別して案内する。
+`:GitHub related-pr [owner/repo] <commit>`を受ける。commitは必須。`owner/repo`を省略した1引数形は操作開始時cwdのoriginからhost/owner/repoを解決し、github.com以外なら対応していないhostを案内して照会せず拒否する。`owner/repo`を指定した2引数形はgithub.comのリポジトリを指定し、Git checkout不要。既存`:GhGetAssociatedPullRequest <commit>` / `<owner> <repo> <commit>`も互換用に残す。関連PRの先頭1件のURLを表示し、commitなし・対象なし・エラーは区別して案内する。
 
 ## API
 
@@ -19,8 +19,9 @@ gh GraphQL `repository(owner:$owner,name:$repo) { object(expression:$commit) { _
 
 | 処理 | 層 | 実装先ファイル |
 | --- | --- | --- |
+| `:GitHub related-pr`の引数解析と登録 | 公開入口 | `lua/github/features/command.lua`, `plugin/github.lua` |
 | 関連PRのURL確認の制御・表示 | 機能 | `lua/github/features/related_pr.lua` |
-| 関連PRコマンドの登録 | plugin入口 | `plugin/github_related_pr.lua` |
+| 互換コマンドの登録 | plugin入口 | `plugin/github_related_pr.lua` |
 | 振る舞いの単体・結合検証 | テスト | `lua/github/features/related_pr_spec.lua` |
 
 ## エッジケースの決定
@@ -38,3 +39,5 @@ gh GraphQL `repository(owner:$owner,name:$repo) { object(expression:$commit) { _
 | （US-019）コミットを指定して関連PRを照会し、コミットが存在しないか関連PRが0件だった場合は、見つからないことが表示される。 | 結合 |
 | （US-019）引数が不正な状態、リポジトリを解決できない状態、または通信できない状態で関連PRを照会すると、理由が表示され、引数や対象の指定に不足がある場合は必要な指定も案内され、別リポジトリの結果は表示されない。 | 結合 |
 | （US-019）コミット引数を省略して関連PRの照会を実行すると、必須のコミット指定が案内され、暗黙のHEADで照会されない。 | 結合 |
+
+結合テストでは`:GitHub related-pr`の1引数（commitのみ）と2引数（owner/repo + commit）、および互換コマンドの各形式を確認する。
