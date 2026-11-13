@@ -157,3 +157,62 @@ describe("plugin setup and readiness", function()
     }, messages)
   end)
 end)
+
+describe("projects configuration", function()
+  local config = require("github.core.config")
+  local defaults = { group_by = "Status", column_width = 36, max_items = 1000 }
+  local non_defaults = { group_by = "Sprint", column_width = 20, max_items = 1 }
+
+  before_each(function()
+    config.set(non_defaults)
+  end)
+
+  it("applies defaults when projects is omitted or empty", function()
+    local github = require("github")
+    assert.same({}, github.setup())
+    assert.same(defaults, config.projects())
+    assert.same({}, github.setup({ projects = {} }))
+    assert.same(defaults, config.projects())
+  end)
+
+  it("normalizes group_by and accepts boundary values", function()
+    local github = require("github")
+    github.setup({ projects = { group_by = "  Sprint  ", column_width = 20, max_items = 10000 } })
+    assert.same({ group_by = "Sprint", column_width = 20, max_items = 10000 }, config.projects())
+    github.setup({ projects = { column_width = 80, max_items = 1 } })
+    assert.same({ group_by = "Status", column_width = 80, max_items = 1 }, config.projects())
+  end)
+
+  it("rejects unsupported keys, invalid types and out-of-range values without changing the configuration", function()
+    local github = require("github")
+    local invalid = {
+      { { projects = { unknown = true } }, "does not support projects option: unknown" },
+      { { projects = { group_by = "" } }, "group_by must not be empty" },
+      { { projects = { group_by = "   " } }, "group_by must not be empty" },
+      { { projects = { group_by = 1 } }, "group_by must be a string" },
+      { { projects = { column_width = 19 } }, "column_width must be an integer between 20 and 80" },
+      { { projects = { column_width = 81 } }, "column_width must be an integer between 20 and 80" },
+      { { projects = { column_width = 36.5 } }, "column_width must be an integer between 20 and 80" },
+      { { projects = { column_width = "36" } }, "column_width must be an integer between 20 and 80" },
+      { { projects = { max_items = 0 } }, "max_items must be an integer between 1 and 10000" },
+      { { projects = { max_items = 10001 } }, "max_items must be an integer between 1 and 10000" },
+      { { projects = { max_items = 1000.5 } }, "max_items must be an integer between 1 and 10000" },
+      { { projects = { max_items = "1000" } }, "max_items must be an integer between 1 and 10000" },
+      { { projects = "invalid" }, "projects must be a table" },
+    }
+    for _, case in ipairs(invalid) do
+      local ok, err = pcall(github.setup, case[1])
+      assert.is_false(ok)
+      assert.matches(case[2], err)
+      assert.same(non_defaults, config.projects())
+    end
+  end)
+
+  it("does not apply a partially valid configuration", function()
+    local github = require("github")
+    local ok, err = pcall(github.setup, { projects = { group_by = "Sprint", max_items = 0 } })
+    assert.is_false(ok)
+    assert.matches("max_items must be an integer between 1 and 10000", err)
+    assert.same(non_defaults, config.projects())
+  end)
+end)

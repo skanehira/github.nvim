@@ -25,9 +25,18 @@ describe("GitHub API adapter", function()
   it("reports process failure, invalid JSON and GraphQL errors for the target", function()
     local gh = require("github.core.gh")
     local responses = {
-      { { code = 1, signal = 0, stdout = "", stderr = "secret" }, "GitHub request failed (exit 1)" },
-      { { code = 0, signal = 0, stdout = "invalid", stderr = "" }, "invalid JSON response" },
-      { { code = 0, signal = 0, stdout = '{"errors":[{"message":"x"}]}', stderr = "" }, "GraphQL errors returned" },
+      {
+        { code = 1, signal = 0, stdout = "", stderr = "secret" },
+        { target = "github.com/o/r", reason = "GitHub request failed (exit 1)" },
+      },
+      {
+        { code = 0, signal = 0, stdout = "invalid", stderr = "" },
+        { target = "github.com/o/r", reason = "invalid JSON response" },
+      },
+      {
+        { code = 0, signal = 0, stdout = '{"errors":[{"message":"x"}]}', stderr = "" },
+        { target = "github.com/o/r", reason = "GraphQL errors returned", errors = { "x" } },
+      },
     }
     for _, pair in ipairs(responses) do
       local failure
@@ -37,7 +46,7 @@ describe("GitHub API adapter", function()
       adapter.graphql({ host = "github.com", owner = "o", repo = "r" }, "query {x}", {}, function(_, err)
         failure = err
       end)
-      assert.same({ target = "github.com/o/r", reason = pair[2] }, failure)
+      assert.same(pair[2], failure)
     end
   end)
 
@@ -136,5 +145,39 @@ describe("pagination response validation", function()
       assert.is_nil(value)
       assert.is_string(failure)
     end
+  end)
+end)
+
+describe("target names and error details", function()
+  it("supports targets without repository components", function()
+    local gh = require("github.core.gh")
+    local failures = {}
+    local function capture(index)
+      return function(_, err)
+        failures[index] = err
+      end
+    end
+    local adapter = gh.new(function(_, _, cb)
+      cb({ code = 1, stdout = "", stderr = "HTTP 403: forbidden" })
+    end)
+    adapter.graphql({ host = "github.com" }, "query {x}", {}, capture(1))
+    adapter.rest({ host = "github.com", owner = "alice" }, "GET", "users/alice", nil, capture(2))
+    assert.same({ target = "github.com", reason = "GitHub request failed (exit 1)", status = 403 }, failures[1])
+    assert.same({ target = "github.com/alice", reason = "GitHub request failed (exit 1)", status = 403 }, failures[2])
+  end)
+
+  it("returns all GraphQL error messages for the caller to classify", function()
+    local adapter = require("github.core.gh").new(function(_, _, cb)
+      cb({ code = 0, stdout = '{"errors":[{"message":"Could not resolve"},{"message":"second"}]}' })
+    end)
+    local failure
+    adapter.graphql({ host = "github.com", owner = "alice" }, "query {x}", {}, function(_, err)
+      failure = err
+    end)
+    assert.same({
+      target = "github.com/alice",
+      reason = "GraphQL errors returned",
+      errors = { "Could not resolve", "second" },
+    }, failure)
   end)
 end)

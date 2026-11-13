@@ -1,14 +1,31 @@
 local M = {}
 
+local function target_name(target)
+  local parts = { target.host }
+  if target.owner then
+    parts[#parts + 1] = target.owner
+  end
+  if target.repo then
+    parts[#parts + 1] = target.repo
+  end
+  return table.concat(parts, "/")
+end
+
 function M.new(run)
   run = run or require("github.core.process").run
   local function call(target, argv, stdin, graphql, callback)
-    local name = target.host .. "/" .. target.owner .. "/" .. target.repo
+    local name = target_name(target)
     run(argv, { stdin = stdin, cwd = target.cwd }, function(result)
-      local function fail(reason, kind)
+      local function fail(reason, kind, status, errors)
         local failure = { target = name, reason = reason }
         if argv[5] == "--method" and argv[6] == "PATCH" then
           failure.kind = kind
+        end
+        if status then
+          failure.status = status
+        end
+        if errors then
+          failure.errors = errors
         end
         callback(nil, failure)
       end
@@ -20,19 +37,24 @@ function M.new(run)
       end
       if result.code ~= 0 then
         local stderr = result.stderr or ""
-        if result.code == 4 or stderr:find("HTTP 401", 1, true) or stderr:find("gh auth login", 1, true) then
-          return fail("gh is not authenticated; run gh auth login --hostname " .. target.host, "rejected")
-        end
         local status = tonumber(stderr:match("HTTP (%d%d%d)"))
+        if result.code == 4 or status == 401 or stderr:find("gh auth login", 1, true) then
+          return fail("gh is not authenticated; run gh auth login --hostname " .. target.host, "rejected", status)
+        end
         local kind = status and status >= 400 and status < 500 and "rejected" or "unknown"
-        return fail("GitHub request failed (exit " .. tostring(result.code) .. ")", kind)
+        return fail("GitHub request failed (exit " .. tostring(result.code) .. ")", kind, status)
       end
       local ok, decoded = pcall(vim.json.decode, result.stdout)
       if not ok or type(decoded) ~= "table" then
         return fail("invalid JSON response")
       end
-      if graphql and decoded.errors and decoded.errors ~= vim.NIL and #decoded.errors > 0 then
-        return fail("GraphQL errors returned")
+      if graphql and type(decoded.errors) == "table" and decoded.errors ~= vim.NIL and #decoded.errors > 0 then
+        local messages = {}
+        for _, item in ipairs(decoded.errors) do
+          messages[#messages + 1] = type(item) == "table" and type(item.message) == "string" and item.message
+            or tostring(item)
+        end
+        return fail("GraphQL errors returned", nil, nil, messages)
       end
       callback(decoded)
     end)
