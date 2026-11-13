@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>保留レビュー項目: issue #50</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 960px; line-height: 1.6; color: #1f2328; }
+  h1 { font-size: 1.4rem; }
+  .item { border: 1px solid #d0d7de; border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+  .item h2 { font-size: 1rem; margin: 0 0 .5rem; }
+  .meta { color: #57606a; font-size: .85rem; }
+  .severity-medium { border-left: 4px solid #bf8700; }
+  dl { display: grid; grid-template-columns: 8rem 1fr; gap: .25rem 1rem; margin: .75rem 0 0; }
+  dt { font-weight: 600; }
+  dd { margin: 0; }
+  code { background: #f6f8fa; padding: .1rem .3rem; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>保留レビュー項目: issue #50（Projects の一覧とボード）</h1>
+<p>dev-impl のレビューで medium と判定され、merge を止めずに事後確認へ回した項目です。チェックして対応したら、このファイルを削除してください。</p>
+<section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>読み込み中の`Loading &lt;fetched&gt;/&lt;total&gt;...`は取得済み件数ではなく直前の項目数（#state.items）とProject総数（state.project.item_count）を表示し、ページ取得の進捗を反映しない。フィルタ適用時は総数もフィルタ後の総数ではない。</h2>
+  <p class="meta">medium / spec-compliance / <code>lua/github/features/projects/board.lua:283</code></p>
+  <dl>
+    <dt>summary</dt><dd>読み込み中の`Loading &lt;fetched&gt;/&lt;total&gt;...`は取得済み件数ではなく直前の項目数（#state.items）とProject総数（state.project.item_count）を表示し、ページ取得の進捗を反映しない。フィルタ適用時は総数もフィルタ後の総数ではない。</dd>
+    <dt>evidence</dt><dd>コード: board.lua:283-284のloadingは &quot;Loading &quot; .. #state.items .. &quot;/&quot; .. tostring(state.project.item_count or #state.items) .. &quot;...&quot;。#state.itemsは取得開始時点の直前の項目数（成功時にboard.lua:420-425で置換）、state.project.item_countは詳細取得時のitems.totalCount（フィルタ前）。APIのitemsは全ページ取得後に1回だけcallbackする（api.lua:760-830）ため、ページごとの取得済み件数はボードに届かない。テスト: board_spec.lua:302は初回 &quot;Loading 0/4...&quot;、board_spec.lua:485と834は再取得 &quot;Loading 4/4...&quot;（直前の4件）、board_spec.lua:526は空フィルタ適用時に &quot;Loading 0/4...&quot;（4はフィルタ前の総数）。設計: projects-board.md:26（Loading &lt;fetched&gt;/&lt;total&gt;...）、projects-ui.md:38（ページ取得では取得済み/総数を更新する）。r1 の medium が未解消（再掲）。</dd>
+    <dt>fix_hint</dt><dd>APIのitemsにページごとの進捗callbackを足す（projects-api/#47の契約変更）か、ボードがpageInfoを辿って取得済み件数を更新する。少なくともフィルタ適用時は総数をフィルタ後のtotalCountにし、fetchedは取得済み件数にする。ヘッダの進捗を固定する結合テストを追加する。API層の変更が#47の範囲なら、設計を修正して表示の意味を合わせる。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="test-quality">
+  <h2>list_specが設計の結合テスト方針（projects-list.md:101の段落）のうち、Git checkout外、別ownerの別画面、一覧qでの子ボード閉じ、gh未導入/projectスコープ不足、番号のみの0/-1/1.5、0件一覧のr、開いたままの古い応答を固定していない。</h2>
+  <p class="meta">medium / test-quality / <code>lua/github/features/projects/list_spec.lua:730</code></p>
+  <dl>
+    <dt>summary</dt><dd>list_specが設計の結合テスト方針（projects-list.md:101の段落）のうち、Git checkout外、別ownerの別画面、一覧qでの子ボード閉じ、gh未導入/projectスコープ不足、番号のみの0/-1/1.5、0件一覧のr、開いたままの古い応答を固定していない。</dd>
+    <dt>evidence</dt><dd>設計の段落（projects-list.md:101）の各項目をlist_specの21テスト（773行）と突合した。未固定: (1) Git checkout外（chdir/checkoutのテストなし。実装はlist.lua:227-247でrepoを使わないが、cwdをGit外にした結合テストがない）、(2) 別ownerの別画面（list_spec.lua:331-361はalice/bob/carolを順に開くが、最初の一覧が別floatとして残ることを#float_windows()などで固定していない）、(3) 一覧qでの子ボード閉じ（list_spec.lua:546-575はボードを先に閉じる。一覧を子ボードを開いたまま閉じるテストがない）、(4) gh未導入/projectスコープ不足（認証失敗のexit 4はlist_spec.lua:475-496で固定。gh未導入とscopeはapi_specの単体のみで、一覧の案内表示は未固定）、(5) 番号のみの0/-1/1.5（list_spec.lua:497-523はowner+numberの0/-1/1.5のみ。bare numberは有効な7だけ）、(6) 0件一覧のr（list_spec.lua:331-337は空一覧を表示するがrを押さない）、(7) 開いたままの古い応答（一覧のloadの世代ガードlist.lua:97-120を2応答で固定するテストがない。ボードにはboard_spec.lua:853-908がある）。表の行（11行）はすべて固定済み。r1 の medium が未解消（再掲）。</dd>
+    <dt>fix_hint</dt><dd>設計の段落の各項目を結合テストで固定する。特に、別ownerの一覧が別floatになること（#float_windows()と両方の行）、一覧qで子ボードも閉じること、0件一覧のr、同じ一覧で2つの応答を返したときの世代破棄、bare numberの0/-1/1.5、Git checkout外（:cd /tmpなど）を追加する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="test-quality">
+  <h2>board_specが設計の結合テスト方針（projects-board.md:165の段落）のうち、初回項目取得失敗、PR本文プレビュー、body_cacheのr/フィルタ破棄、列ごとの縦位置の独立性、非グループ単一選択の同列維持、追加の列末尾/削除の次・前選択、表示領域より高いカード、フィルタ変更なしの再取得抑止を固定していない（日本語タイトルとredactedはui.cardの単体で固定済み、直接ボードのqは固定済み）。</h2>
+  <p class="meta">medium / test-quality / <code>lua/github/features/projects/board_spec.lua:1056</code></p>
+  <dl>
+    <dt>summary</dt><dd>board_specが設計の結合テスト方針（projects-board.md:165の段落）のうち、初回項目取得失敗、PR本文プレビュー、body_cacheのr/フィルタ破棄、列ごとの縦位置の独立性、非グループ単一選択の同列維持、追加の列末尾/削除の次・前選択、表示領域より高いカード、フィルタ変更なしの再取得抑止を固定していない（日本語タイトルとredactedはui.cardの単体で固定済み、直接ボードのqは固定済み）。</dd>
+    <dt>evidence</dt><dd>設計の段落（projects-board.md:165）の各項目をboard_specの29テスト（1173行）と突合した。未固定: (1) 初回項目取得失敗（board_spec.lua:1113-1144はdetail失敗/遅延応答のみ。detail成功後の初回items失敗がない）、(2) PR本文プレビュー（board_spec.lua:532-562はIssueとDraftのみ）、(3) body_cacheのr/フィルタ破棄（キャッシュ再利用はboard_spec.lua:532-562で固定、r/フィルタで破棄されることを固定していない）、(4) 列ごとのoffset独立性（board_spec.lua:442-468は1列目のみ。2列目をスクロールしても1列目が変わらないことを固定していない）、(5) 日本語タイトル（ui_spec.lua:197-215のui.card単体で固定済み、ボード結合は未固定）、(6) redacted表示（ui_spec.lua:242-248のui.card単体で固定済み、ボード結合はboard_spec.lua:756-792で選択とプレビュー拒否のみ）、(7) 非グループ単一選択の同列維持（board_spec.lua:1047-1096のupdate_fieldはテキストとグループstatusのみ）、(8) 追加の列末尾/削除の次・前選択（追加は空のDone列、削除は唯一の項目で列ヘッダのみ）、(9) 表示領域より高いカード（ensure_visibleのboard.lua:231のcard_height &gt; available分岐が未固定）、(10) フィルタ変更なしの再取得抑止（同じフィルタの再送信でghを呼ばないことを固定していない）。固定済み: 直接ボードのq（board_spec.lua:932-969）、アーカイブ非表示・redactedのプレビュー/移動不可（board_spec.lua:756-792）。表の行（13行）はすべて固定済み。r1 の medium が未解消（再掲）。</dd>
+    <dt>fix_hint</dt><dd>設計の段落の各項目を結合テストで固定する。特に、初回項目取得失敗（detail成功後にitems失敗）、PR本文プレビュー、body_cacheのr/フィルタ破棄、2列のoffset独立性、非グループ単一選択の同列維持、3件の列での削除時の次/前選択、高いカード（card_height &gt; available）、同じフィルタの再送信でghを呼ばないことを追加する。日本語/redactedはui.cardの単体で固定済みなので、ボード結合では表示行を1本追加する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>projects-board.md:121の追記はAPI層のcontentがtotal_count/sub_issues/related_pullsを持つとするが、projects-api.md:51は内部モデルのcontentがtotalCountを保持すると記載しており、設計書間でフィールド名が矛盾している。実装（api.lua）はtotal_countを使う。</h2>
+  <p class="meta">medium / spec-compliance / <code>docs/design/features/projects-board.md:121</code></p>
+  <dl>
+    <dt>summary</dt><dd>projects-board.md:121の追記はAPI層のcontentがtotal_count/sub_issues/related_pullsを持つとするが、projects-api.md:51は内部モデルのcontentがtotalCountを保持すると記載しており、設計書間でフィールド名が矛盾している。実装（api.lua）はtotal_countを使う。</dd>
+    <dt>evidence</dt><dd>差分の追記: projects-board.md:121「API層の項目contentはtotal_count、sub_issues、related_pullsを持つ」。projects-api.md:51「contentはラベル・担当者・関連PRのtotalCountも保持し」。実装: api.lua:357-358のparse_itemはsub_issues/related_pullsを返し、labels/assigneesはtotal_count（api.lua:284,301）、board.lua:166/181-182のui_itemがtotal_count→totalCount、sub_issues→subIssuesSummary、related_pulls→closedByPullRequestsReferencesに詰め替える。設計書間で内部モデルのキー名が食い違い、projects-api.mdを読んだ実装者がtotalCountを使うと壊れる。r1 の medium が未解消（再掲）。</dd>
+    <dt>fix_hint</dt><dd>projects-api.md:51の内部モデルの記述を実装のtotal_count/sub_issues/related_pullsに合わせる（またはprojects-board.md:121の追記をAPIモデルの正しい名前に修正する）。設計書間の名前を統一する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="code-quality">
+  <h2>list.luaが公開するM.state(buf)はリポジトリ内に呼び出し元がなく、設計・DoDでも要求されていない（DoDが要求するのはboard.state）。未使用APIで最小実装違反。</h2>
+  <p class="meta">medium / code-quality / <code>lua/github/features/projects/list.lua:250</code></p>
+  <dl>
+    <dt>summary</dt><dd>list.luaが公開するM.state(buf)はリポジトリ内に呼び出し元がなく、設計・DoDでも要求されていない（DoDが要求するのはboard.state）。未使用APIで最小実装違反。</dd>
+    <dt>evidence</dt><dd>list.lua:250のM.state(buf)はgithub.features.projects.listの公開API。grepで呼び出し元なし（links/open.lua:59、links/copy.lua:39、issues/state.lua:8/41、parity_spec.lua:225はいずれもgithub.features.issues.listのstate）。設計projects-list.mdの一覧の状態・APIにstateはなく、DoDもboard.stateだけを要求する。r1 の medium が未解消（再掲）。</dd>
+    <dt>fix_hint</dt><dd>M.state(buf)を削除する（または設計に一覧の状態参照APIが必要と明記して利用箇所を作る）。</dd>
+  </dl>
+</section>
+</body>
+</html>
