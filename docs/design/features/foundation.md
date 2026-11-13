@@ -21,7 +21,7 @@ GitHub/Gitの外部コマンド実行、リポジトリ文脈、URIの解析・�
 
 ## API
 
-共通規約はDESIGN.md「GitHub API一覧」「横断規約」参照。ghを使い、GitHub認証情報を直接読まない。テストでは外界を制御可能な実行器へ置換し、実GitHubの書込みを行わない。`core/float.lua`は`open(opts)`、`close(name)`、`focus(name)`、`resize_all()`、`is_open(name)`、`target_size(width_ratio, height_ratio)`、`centered(width, height)`を返す。`open`の`opts`は`{name, parent?, width, height, row?, col?, border?, style?, focusable?}`。
+共通規約はDESIGN.md「GitHub API一覧」「横断規約」参照。ghを使い、GitHub認証情報を直接読まない。テストでは外界を制御可能な実行器へ置換し、実GitHubの書込みを行わない。`core/float.lua`は`open(opts)`、`close(name)`、`focus(name)`、`resize_all()`、`is_open(name)`、`target_size(width_ratio, height_ratio)`、`centered(width, height)`を返す。`open`の`opts`は`{name, parent?, width, height, row?, col?, border?, style?, focusable?, fixed_height?}`。`width`/`height`から幅・高さの比率を復元し、`VimResized`では`fixed_height=true`でない限り両軸を再計算する。
 
 ## 実装の配置
 

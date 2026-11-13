@@ -25,7 +25,7 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 | ヘルプ | キー操作 | ボード | 幅70%、高さ60% |
 | 追加の選択 | 既存Issue/PRか下書きかの選択 | ボード | 幅40%、高さ4 |
 
-比率は`target_size(ratio_w, ratio_h)`で計算する。編集領域は`vim.o.columns - 2`と`vim.o.lines - 2`とし、幅・高さは1以上にclampする。中央配置は`row = floor((vim.o.lines - height - 2) / 2)`、`col = floor((vim.o.columns - width - 2) / 2)`とし、負の座標にしない。ボーダーは`rounded`、`style`は`minimal`。
+比率は`target_size(ratio_w, ratio_h)`で計算する。編集領域は`vim.o.columns - 2`と`vim.o.lines - 2`とし、幅・高さは1以上にclampする。中央配置は`row = floor((vim.o.lines - height - 2) / 2)`、`col = floor((vim.o.columns - width - 2) / 2)`とし、負の座標にしない。ボーダーは`rounded`、`style`は`minimal`。比率で開く画面は`target_size`で得た`width`/`height`を`open`に渡す。固定高さの画面（1行入力・確認・追加の選択）は`height`と`fixed_height=true`で開き、幅だけを比率で再計算する。
 
 ### 共通の画面規則
 
@@ -123,7 +123,7 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 
 ### プレビューとヘルプ
 
-- プレビューは項目の種別・番号・タイトルをヘッダに表示し、本文を`filetype=markdown`、`modifiable=false`で表示する。読み込み中・失敗時はヘッダに状態を表示する。`q`/`<Esc>`で閉じる。
+- プレビューは項目の種別・番号・タイトルをヘッダに表示し、本文を`filetype=gh-projects-preview`（構文はmarkdown）、`modifiable=false`で表示する。読み込み中・失敗時はヘッダに状態を表示する。`q`/`<Esc>`で閉じる。
 - ヘルプは一覧・ボード・フィールド編集・追加・削除のキーを表形式で表示する。`j`/`k`/`gg`/`G`でスクロールし、`q`/`<Esc>`で閉じる。ボードは残る。
 
 ## API
