@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>保留レビュー項目: issue #47</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 960px; line-height: 1.6; color: #1f2328; }
+  h1 { font-size: 1.4rem; }
+  .item { border: 1px solid #d0d7de; border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+  .item h2 { font-size: 1rem; margin: 0 0 .5rem; }
+  .meta { color: #57606a; font-size: .85rem; }
+  .severity-medium { border-left: 4px solid #bf8700; }
+  dl { display: grid; grid-template-columns: 8rem 1fr; gap: .25rem 1rem; margin: .75rem 0 0; }
+  dt { font-weight: 600; }
+  dd { margin: 0; }
+  code { background: #f6f8fa; padding: .1rem .3rem; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>保留レビュー項目: issue #47（Projects の API 層と設定）</h1>
+<p>dev-impl のレビューで medium と判定され、merge を止めずに事後確認へ回した項目です。チェックして対応したら、このファイルを削除してください。</p>
+<section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>issue #47の非スコープは core/gh.lua の変更を「repoを持たないtarget」と「GraphQL errorsの返却」に限っているが、差分は failure.status の追加と401判定の書き換えまで行っている。</h2>
+  <p class="meta">medium / spec-compliance / <code>lua/github/core/gh.lua:24</code></p>
+  <dl>
+    <dt>summary</dt><dd>issue #47の非スコープは core/gh.lua の変更を「repoを持たないtarget」と「GraphQL errorsの返却」に限っているが、差分は failure.status の追加と401判定の書き換えまで行っている。</dd>
+    <dt>evidence</dt><dd>`git diff f3c3f704adf9d8c7ae7079d5ee444b00706b0db3 -- lua/github/core/gh.lua` は `if status then failure.status = status end`（24行目）と `status == 401` への401判定の書き換え（41行目）を追加している。issue #47 の非スコープは「core/gh.luaのrepoを持たないtargetとGraphQL errorsの返却以外、foundation.mdの既存ファイルは変更しない」であり、status追加はこの2例外に含まれない。一方 foundation.md:14 は「HTTPステータスコードをstatusに保持する」、projects-api.md:90 は共通ghアダプタのstatusから401/403/404/422/429を分類する前提なので、status追加はAPI設計上必要で、非スコープ/設計の整合が必要。</dd>
+    <dt>fix_hint</dt><dd>status追加を非スコープの例外に含めるよう設計/issueを更新するか、statusを使わずにAPI側で分類できる形へ設計を見直す。どちらにするかは呼び出し側が判断する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>statusがない通信失敗が network にならず unknown になり、projects-api.md:90 の「statusがない起動失敗・通信失敗はnetwork」を満たしていない。</h2>
+  <p class="meta">medium / spec-compliance / <code>lua/github/features/projects/api.lua:175</code></p>
+  <dl>
+    <dt>summary</dt><dd>statusがない通信失敗が network にならず unknown になり、projects-api.md:90 の「statusがない起動失敗・通信失敗はnetwork」を満たしていない。</dd>
+    <dt>evidence</dt><dd>api.lua:175 は `reason:find(&#x27;failed to start&#x27;)` だけを network にし、statusなしの `GitHub request failed (exit 1)` は195行目で unknown になる。api_spec.lua:1058 も同じ理由で unknown を期待しており、通信失敗の network 分類を固定していない。projects-api.md:90 は「statusがない起動失敗・通信失敗はnetwork、statusがないその他の失敗はunknown」、foundation.md:14 は「statusがない失敗はunknown」としており、通信失敗の扱いが設計間で衝突している。</dd>
+    <dt>fix_hint</dt><dd>通信失敗を network とするなら gh アダプタが通信失敗を識別できる情報（stderr の種別など）を返す必要がある。設計の衝突を解消し、どちらの分類を正とするか呼び出し側が決める。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="test-quality">
+  <h2>失敗モデルの reason が owner 解決・HTTP 4xx・起動失敗・不正応答のテストで固定されておらず、reason を壊しても大半のテストが通る。</h2>
+  <p class="meta">medium / test-quality / <code>lua/github/features/projects/api_spec.lua:237</code></p>
+  <dl>
+    <dt>summary</dt><dd>失敗モデルの reason が owner 解決・HTTP 4xx・起動失敗・不正応答のテストで固定されておらず、reason を壊しても大半のテストが通る。</dd>
+    <dt>evidence</dt><dd>api_spec.lua:237 の owner 失敗テストは `assert.is_string(err.reason)` だけ、327/639/819/964/1010 の不正応答テストは `err.kind` だけを検証する。`classify` の `reason = detail` を `reason = &#x27;error&#x27;` に変異させて `make test-file FILE=lua/github/features/projects/api_spec.lua` を実行すると Success 33 / Failed 1 で、Fail するのは GraphQL メッセージを含む「classifies GraphQL errors and HTTP statuses...」の1件だけ。projects-api.md のテスト方針15行目は「種別と理由に変換する」なので、reason 側が未固定。</dd>
+    <dt>fix_hint</dt><dd>owner/HTTP/起動失敗/不正応答の各ケースで、kind だけでなく reason（アダプタの理由、または invalid ... response）を完全一致で検証する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="test-quality">
+  <h2>items の要求形は archivedStates と orderBy しか固定されておらず、content の labels/assignees/subIssuesSummary/relatedPulls/fieldValues を query から削っても全テストが通る。</h2>
+  <p class="meta">medium / test-quality / <code>lua/github/features/projects/api_spec.lua:471</code></p>
+  <dl>
+    <dt>summary</dt><dd>items の要求形は archivedStates と orderBy しか固定されておらず、content の labels/assignees/subIssuesSummary/relatedPulls/fieldValues を query から削っても全テストが通る。</dd>
+    <dt>evidence</dt><dd>api_spec.lua:471-472 は query に `archivedStates: [NOT_ARCHIVED]` と `orderBy: {field: POSITION, direction: ASC}` が含まれることだけを検証する。api.lua の `item_fields` から labels/assignees/subIssuesSummary/closedByPullRequestsReferences/fieldValues を削除して `make test-file FILE=lua/github/features/projects/api_spec.lua` を実行すると 34件全て Success。同じ形の箇所を一括走査: projects_query の public、detail_query の fields(first:50) とその選択、update/clear/delete の応答選択、content_query/body_query の union 選択も、fake 応答が query と独立しているため、各選択を query から削った変異で 34件全て Success のままだった（projects/detail/update/clear/delete/content/body の選択をまとめて削る変異で確認）。projects-api.md のテスト方針は「fake ghで要求の形・ページング・エラー・モデル変換を検証する」としている。</dd>
+    <dt>fix_hint</dt><dd>各 query テンプレートについて、設計が要求する選択（items の content 各フィールドと fieldValues、projects の public、detail の fields(first:50)/views(first:10)、mutation の応答項目、content/body の union）が query に含まれることを検証する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="test-quality">
+  <h2>detail と items のテストは User だけで、Organization の root を user に固定しても全テストが通る。</h2>
+  <p class="meta">medium / test-quality / <code>lua/github/features/projects/api_spec.lua:359</code></p>
+  <dl>
+    <dt>summary</dt><dd>detail と items のテストは User だけで、Organization の root を user に固定しても全テストが通る。</dd>
+    <dt>evidence</dt><dd>api_spec.lua:359 の detail と450の items は User の応答だけを使い、Organization のケースがない。`detail_query:format(&#x27;user&#x27;)` と `items_query:format(&#x27;user&#x27;, item_fields)` に固定して `make test-file FILE=lua/github/features/projects/api_spec.lua` を実行すると 34件全て Success。org 一覧テストは projects_query を使うため、detail/items の org root の退行を検出できない。projects-api.md は「確定した種別に応じて user または organization のクエリで解決する」としており、一覧だけでなく詳細・項目にも適用される。</dd>
+    <dt>fix_hint</dt><dd>detail と items を User/Organization でパラメータ化し、org の root と応答解析を検証する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="test-quality">
+  <h2>一覧の「100件かつ続きなし」と項目の「max_items ちょうどかつ続きなし」の境界が未固定で、上限到達だけで truncated=true にする変異が通る。</h2>
+  <p class="meta">medium / test-quality / <code>lua/github/features/projects/api_spec.lua:243</code></p>
+  <dl>
+    <dt>summary</dt><dd>一覧の「100件かつ続きなし」と項目の「max_items ちょうどかつ続きなし」の境界が未固定で、上限到達だけで truncated=true にする変異が通る。</dd>
+    <dt>evidence</dt><dd>api_spec.lua:243 の一覧テストは100件+hasNextPage=true、0件+false、10ページ+trueのみ。450の items テストは max_items=150 で200件+falseと0件のみで、100件+false と max_items ちょうど+false のケースがない。`finish(#collected &gt;= 100 or pages &gt;= 10 or over)` / `finish(#collected &gt;= max_items or more or over)` に変異させて `make test-file FILE=lua/github/features/projects/api_spec.lua` を実行すると 34件全て Success。projects-api.md は「開いているProjectが100件に達し、まだhasNextPageが真...の場合にtruncated」/「max_itemsに達した場合はtruncated」としており、続きがない場合の false を固定する必要がある。</dd>
+    <dt>fix_hint</dt><dd>一覧100件+hasNextPage=false と items が max_items ちょうど+hasNextPage=false のケースを追加し、truncated=false を検証する（max_items ちょうどの意味も設計で明確化する）。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="test-quality">
+  <h2>書込み失敗時の再送なしは update_field だけ固定され、clear_field・add_item・add_draft の失敗経路に再送を入れてもテストが通る。</h2>
+  <p class="meta">medium / test-quality / <code>lua/github/features/projects/api_spec.lua:805</code></p>
+  <dl>
+    <dt>summary</dt><dd>書込み失敗時の再送なしは update_field だけ固定され、clear_field・add_item・add_draft の失敗経路に再送を入れてもテストが通る。</dd>
+    <dt>evidence</dt><dd>api_spec.lua:805 の update_field 失敗テストは `#calls == 1` と kind を検証し、1010 の delete は GraphQL エラーで kind を検証する。clear_field（成功テストのみ）・add_item（941/964 はデータ応答のみ）・add_draft（975 は成功のみ）には失敗応答のテストがない。clear_field の失敗分岐に再送を追加する変異（`return clear_field(...)`）を入れて `make test-file FILE=lua/github/features/projects/api_spec.lua` を実行すると 34件全て Success。projects-api.md のテスト方針16行目は「書込み失敗時に自動再送せず、結果不明を成功と断定しない」を求めている。</dd>
+    <dt>fix_hint</dt><dd>clear_field・add_item・add_draft の失敗ケースを追加し、`#calls == 1`・結果 nil・期待する kind を検証する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="test-quality">
+  <h2>項目/下書きの任意属性が1値だけで、archived=true・本文あり・関連PR0件・サブIssue null が未固定。</h2>
+  <p class="meta">medium / test-quality / <code>lua/github/features/projects/api_spec.lua:491</code></p>
+  <dl>
+    <dt>summary</dt><dd>項目/下書きの任意属性が1値だけで、archived=true・本文あり・関連PR0件・サブIssue null が未固定。</dd>
+    <dt>evidence</dt><dd>api_spec.lua:491 の変換テストの項目は `isArchived=false` のみ、975 の add_draft は body=nil のみ、関連PRは1件、subIssuesSummary は {3,1} のみ。`parse_item` の `archived = node.isArchived == true` を `archived = false` に、add_draft の variables の `body = body` を `body = &#x27;&#x27;` に変異させて `make test-file FILE=lua/github/features/projects/api_spec.lua` を実行すると 34件全て Success。projects-api.md は isArchived を保持し、下書きの本文は任意、関連PR0件・サブIssue進捗null をエッジケースとして挙げている。</dd>
+    <dt>fix_hint</dt><dd>項目/下書きのフィクスチャをパラメータ化し、archived=true・本文あり・関連PR0件・subIssuesSummary=null を検証する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="test-quality">
+  <h2>重複判定のテストは map 形式だけを渡し、本番で想定されるモデルの項目配列（`{ &#x27;I1&#x27; }` / `{ { id = &#x27;I1&#x27; } }`）が未固定。</h2>
+  <p class="meta">medium / test-quality / <code>lua/github/features/projects/api_spec.lua:941</code></p>
+  <dl>
+    <dt>summary</dt><dd>重複判定のテストは map 形式だけを渡し、本番で想定されるモデルの項目配列（`{ &#x27;I1&#x27; }` / `{ { id = &#x27;I1&#x27; } }`）が未固定。</dd>
+    <dt>evidence</dt><dd>api_spec.lua:941 は `{ I1 = true }` と `{}` の map 形式だけを渡す。api.lua の重複判定を map のキーだけを見る形（`existing_ids[item.id]`）に変異させて `make test-file FILE=lua/github/features/projects/api_spec.lua` を実行すると 34件全て Success。projects-api.md は「同じ項目IDが既にモデルにある場合はduplicate=true」としており、モデルの項目配列が本番の入力形になる。</dd>
+    <dt>fix_hint</dt><dd>duplicate のテストを map とモデル配列の両形式でパラメータ化する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="test-quality">
+  <h2>新規projects設定テストのエラーメッセージ検証が部分一致で、テスト規約の完全一致に反する。</h2>
+  <p class="meta">medium / test-quality / <code>lua/github/features/setup_spec.lua:206</code></p>
+  <dl>
+    <dt>summary</dt><dd>新規projects設定テストのエラーメッセージ検証が部分一致で、テスト規約の完全一致に反する。</dd>
+    <dt>evidence</dt><dd>setup_spec.lua:206 の `assert.matches(case[2], err)` と215 の `assert.matches(&quot;max_items must be an integer between 1 and 10000&quot;, err)` は、実際のエラー &quot;github.nvim setup projects.&lt;name&gt; must be an integer between ...&quot; の接尾辞だけを検証する。`~/.claude/rules/core/testing.md`「アサーション」は「文字列は完全一致（contains 等の部分一致は禁止）」としており、接頭辞の変更を検出できない。同じ形の箇所（48/51行の既存テスト）はbase_sha時点からあるが、今回追加したprojects設定テストの2箇所が対象。</dd>
+    <dt>fix_hint</dt><dd>`assert.equals` で &quot;github.nvim setup projects.column_width must be an integer between 20 and 80&quot; などの完全なメッセージを検証する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="test-quality">
+  <h2>APIの設定取得が opts.projects 経由だけで、core/config の group_by/max_items を使う経路がテストで固定されていない。</h2>
+  <p class="meta">medium / test-quality / <code>lua/github/features/projects/api.lua:539</code></p>
+  <dl>
+    <dt>summary</dt><dd>APIの設定取得が opts.projects 経由だけで、core/config の group_by/max_items を使う経路がテストで固定されていない。</dd>
+    <dt>evidence</dt><dd>api.lua:535-540 の `settings()` は `opts.projects` が無い場合に `require(&quot;github.core.config&quot;).projects()` を返すが、api_spec.lua:3-7 の `new_api` は常に projects を渡すため、この経路を通るテストがない。`return require(&quot;github.core.config&quot;).projects()` を `return { group_by = &quot;Status&quot;, column_width = 36, max_items = 1000 }` に変異させて `make test` を実行すると exit 0（258 passed / 0 failed）。setup.md は「正規化した設定は core/config.lua に保持し、Projectsの画面は新しい設定を次の取得・再描画から使う」としており、API層が設定を読む経路が未検証。</dd>
+    <dt>fix_hint</dt><dd>config.set({ group_by = &quot;Sprint&quot;, column_width = 20, max_items = 1 }) の後、projects を渡さずに api.new({ client = ... }) を作り、detail の group_field と items の打ち切りが config の値を使うことを検証する。</dd>
+  </dl>
+</section>
+</body>
+</html>
