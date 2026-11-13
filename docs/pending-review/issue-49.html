@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>保留レビュー項目: issue #49</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 960px; line-height: 1.6; color: #1f2328; }
+  h1 { font-size: 1.4rem; }
+  .item { border: 1px solid #d0d7de; border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+  .item h2 { font-size: 1rem; margin: 0 0 .5rem; }
+  .meta { color: #57606a; font-size: .85rem; }
+  .severity-medium { border-left: 4px solid #bf8700; }
+  dl { display: grid; grid-template-columns: 8rem 1fr; gap: .25rem 1rem; margin: .75rem 0 0; }
+  dt { font-weight: 600; }
+  dd { margin: 0; }
+  code { background: #f6f8fa; padding: .1rem .3rem; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>保留レビュー項目: issue #49（Projects のヘルプと README）</h1>
+<p>dev-impl のレビューで medium と判定され、merge を止めずに事後確認へ回した項目です。チェックして対応したら、このファイルを削除してください。</p>
+
+<section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>1. INTRODUCTION が Projects を「virtual buffers」と説明している</h2>
+  <p class="meta">medium / spec-compliance / <code>doc/github.txt:26</code></p>
+  <dl>
+    <dt>summary</dt><dd>INTRODUCTION が Projects v2 boards を「virtual buffers」で操作すると説明しており、Projects は float ウィンドウで <code>github://</code> URI を持たないという設計・同ヘルプの記述と矛盾する。</dd>
+    <dt>evidence</dt><dd>変更後の <code>doc/github.txt:26-27</code> は「GitHub Issues, pull request lists, comments, and Projects v2 boards in virtual buffers」とする。<code>DESIGN.md:11</code> は「Projectsはfloatウィンドウの画面とし、github:// URIを持たない」、<code>DESIGN.md:99</code> も同旨。<code>doc/github.txt:147</code> は「All public virtual buffers use github://」、370 は「Projects v2 boards are displayed in floating windows. Projects have no github:// URI」、717 と 803 も float で URI なしとする。</dd>
+    <dt>fix_hint</dt><dd>「GitHub Issues, pull request lists, comments, and Projects v2 boards in Neovim」のように virtual buffers の適用範囲を Issue/PR/コメントに限定するか、Projects は float ウィンドウである旨を追記する。</dd>
+  </dl>
+</section>
+
+<section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>2. HIGHLIGHTS AND EVENTS に Projects の filetype とハイライトグループが無い</h2>
+  <p class="meta">medium / spec-compliance / <code>doc/github.txt:746</code></p>
+  <dl>
+    <dt>summary</dt><dd>HIGHLIGHTS AND EVENTS に Projects の filetype（<code>gh-projects-list</code>/<code>board</code>/<code>editor</code>/<code>preview</code>/<code>help</code>/<code>input</code>）とハイライトグループ（<code>GitHubProjects*</code>）が追加されておらず、README の「help file documents each ... highlight group, filetype」という記述と矛盾する。</dd>
+    <dt>evidence</dt><dd><code>projects-ui.md:35</code> は Projects の filetype を、45-65 は <code>GitHubProjectsHeader</code>/<code>Column</code>/<code>Card</code>/<code>Number</code>/<code>Meta</code>/<code>Progress</code>/<code>Redacted</code>/<code>Error</code>/<code>Loading</code>/<code>Color*</code> を定義する。<code>doc/github.txt:746-786</code> の HIGHLIGHTS AND EVENTS は既存の <code>gh_*</code> グループと <code>gh-issues</code> 等の filetype だけを列挙する。<code>grep -n 'gh-projects\|GitHubProjects' doc/github.txt README.md</code> は 0 件。<code>README.md:86</code> は「The help file documents each URI, Plug mapping, highlight group, filetype, and User event」とする。</dd>
+    <dt>fix_hint</dt><dd>HIGHLIGHTS AND EVENTS に Projects の filetype と <code>GitHubProjects*</code>/<code>GitHubProjectsColor*</code> グループを追加し、README の記述を満たす。</dd>
+  </dl>
+</section>
+
+<section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>3. ヘルプ画面の閉じ方（q/&lt;Esc&gt; でヘルプだけ閉じる）が未記載</h2>
+  <p class="meta">medium / spec-compliance / <code>doc/github.txt:479</code></p>
+  <dl>
+    <dt>summary</dt><dd>ヘルプ画面の閉じ方（<code>q</code>/<code>&lt;Esc&gt;</code> でヘルプだけを閉じ、ボードは残る）が Projects のヘルプ節に記載されておらず、直後の「q or &lt;Esc&gt; closes the board and its child windows」と合わせて q がボードも閉じると読める。</dd>
+    <dt>evidence</dt><dd><code>DESIGN.md:83</code> はヘルプのキーを <code>j</code>/<code>k</code>/<code>gg</code>/<code>G</code>/<code>q</code>/<code>&lt;Esc&gt;</code> とする。<code>projects-ui.md:127</code> と <code>projects-board.md</code>「ヘルプと終了」は「q/&lt;Esc&gt;で閉じる。ボードは残る」とする。<code>doc/github.txt:479-484</code> は「? opens the key help ... j, k, gg, and G scroll the help. q or &lt;Esc&gt; closes the board and its child windows」とし、ヘルプの q/&lt;Esc&gt; を書いていない。</dd>
+    <dt>fix_hint</dt><dd>ヘルプのキー表または説明に「q or &lt;Esc&gt; closes only the help and keeps the board」を追加し、ボードの q と区別する。</dd>
+  </dl>
+</section>
+</body>
+</html>

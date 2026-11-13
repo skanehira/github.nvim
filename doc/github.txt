@@ -1,4 +1,4 @@
-*github.txt*  GitHub Issues and pull request lists in Neovim
+*github.txt*  GitHub Issues, pull request lists, and Projects in Neovim
 
 Type: User manual
 Author: skanehira
@@ -12,6 +12,7 @@ CONTENTS                                                   *github-contents*
     Issue workflow ........................................ |github-workflow|
     Buffers ............................................... |github-buffers|
     Pull request list ..................................... |github-buffer-pull-list|
+    Projects .............................................. |github-projects|
     Key mappings .......................................... |github-key-mappings|
     Commands .............................................. |github-commands|
     Highlights and events ................................. |github-customization|
@@ -21,9 +22,10 @@ CONTENTS                                                   *github-contents*
 ==============================================================================
 INTRODUCTION                          *github* *github.nvim* *github-introduction*
 
-github.nvim is a Lua port of denops-gh.vim for Neovim. It operates on GitHub
-Issues, pull request lists, and comments in virtual buffers and uses the GitHub CLI for all GitHub
-API requests and authentication.
+github.nvim is a Lua port of denops-gh.vim for Neovim. It operates on
+GitHub Issues, pull request lists, comments, and Projects v2 boards in
+virtual buffers and uses the GitHub CLI for all GitHub API requests and
+authentication.
 
 Repository: https://github.com/skanehira/github.nvim
 Original:   https://github.com/skanehira/denops-gh.vim
@@ -51,12 +53,23 @@ With lazy.nvim:
 <
 The plugin also works without a plugin manager when its directory is on
 'runtimepath' and its plugin files are loaded. Initialization does not invoke
-gh or access GitHub. The optional Lua setup accepts nil or an empty table:
+gh or access GitHub. The optional Lua setup accepts nil, an empty table, or
+the Projects settings:
 >lua
-    require("github").setup()
+    require("github").setup({
+      projects = {
+        group_by = "Status",
+        column_width = 36,
+        max_items = 1000,
+      },
+    })
 <
-No configuration keys are supported in this release. Run |:checkhealth| with
-`github` to check the gh executable and gh authentication:
+`projects` accepts `group_by` (default `Status`), `column_width` (20-80,
+default 36), and `max_items` (1-10000, default 1000). Other keys, unknown
+keys in `projects`, and invalid types or values are rejected without
+applying part of the settings. See |github-projects| for the Project
+commands and keys. Run |:checkhealth| with `github` to check the gh
+executable and gh authentication:
 >
     :checkhealth github
 <
@@ -352,6 +365,279 @@ PULL REQUEST LIST                                    *github-buffer-pull-list*
     are not provided. The filetype is gh-pulls.
 
 ==============================================================================
+PROJECTS                                                     *github-projects*
+
+Projects v2 boards are displayed in floating windows. Projects have no
+github:// URI and no HTTPS entry. Only github.com is supported. gh must be
+installed and authenticated; some Projects operations also require the
+`project` scope. Missing preparation is reported without opening a window.
+
+COMMANDS
+
+:GitHub projects [owner] [number]
+    Open the Project list for owner, or the board of a Project when
+    number is given. Without owner, the authenticated user is used.
+    `@me` also means the authenticated user. When the first argument is
+    numeric, it is a Project number and owner is the authenticated user.
+    Projects work outside a Git checkout because they belong to a user
+    or an organization, not to a repository.
+>
+    :GitHub projects
+    :GitHub projects skanehira
+    :GitHub projects skanehira 12
+    :GitHub projects 12
+<
+    Invalid arguments, such as too many arguments, an empty owner, an
+    owner containing `/` or characters other than letters, digits, and
+    hyphens, or a number that is not a positive integer, show
+    `Usage: GitHub projects [owner] [number]` and open no window.
+
+PROJECT LIST
+
+    The header shows `Projects for <owner> (<type>)  ·  <count> open`.
+    Rows show `#<number> <title>  <items> items  <public|private>`, with
+    long titles shortened by display width. Loading shows
+    `Loading projects...`; failure shows `Error: <reason>`. An empty list
+    shows `No open projects`. When 100 open Projects are shown and more
+    remain, `Showing 100 projects` is displayed. Closed Projects are not
+    listed.
+
+    j and k select the previous or next Project; <CR> opens the board;
+    r reloads the list; q or <Esc> closes the list and its board. A
+    reload keeps the selection by Project number and clamps it when that
+    Project is gone. A reload failure keeps the previous list and shows
+    the reason. Opening the same owner again reuses the list window and
+    reloads it.
+
+Project list:
+    Key       Action
+    ------------------------------------------------------------------------
+    j / k     Select the previous / next Project
+    <CR>      Open the selected Project board
+    r         Reload the list
+    q / <Esc> Close the list
+
+PROJECT BOARD
+
+    The header shows `<owner> / <title>  ·  <items> items  ·  filter:
+    <filter>`. When the filter comes from the Project's first view, it
+    shows `view: <name>  ·  filter: <filter>`. Loading shows
+    `Loading <fetched>/<total>...`; truncation shows
+    `Showing <max_items> of <total>`; failure shows `Error: <reason>`.
+
+    Columns follow the options of the single-select field chosen by
+    `group_by`; items without a value go to the last `○ 値なし` column.
+    Column headers show `● <name> <count>` in the option color. Issue
+    cards show the number, title, labels, assignees, sub-Issue progress,
+    and related PRs; PR cards show the number, title, labels, and
+    assignees; draft Issues show their title; unavailable items show
+    `[redacted]`. Columns use `column_width` and scroll horizontally when
+    they do not fit. Each column keeps its own vertical position.
+    Resizing the editor repositions the list and board and keeps the
+    selection and column positions.
+
+    h and l move between columns; j and k move between items in the
+    selected column; H and L move to the first or last column; g and G
+    move to the first or last item. Movement stops at the edges and does
+    not move within an empty column. Opening the same Project again
+    reuses its board window and reloads it.
+
+Project board:
+    Key       Action
+    ------------------------------------------------------------------------
+    h / l     Previous / next column
+    j / k     Previous / next item in the selected column
+    H / L     First / last column
+    g / G     First / last item in the selected column
+    K         Preview the selected item body
+    <CR>      Open an Issue, PR, or draft Issue
+    <C-o>     Open the item URL in a browser
+    ghy       Copy the item URL to the + register
+    ghs       Change the Project filter
+    ghe       Edit the selected item's fields
+    ghn       Add an existing Issue/PR or a draft Issue
+    ghd       Delete the selected item from the Project
+    r         Reload the board
+    ?         Show key help
+    q / <Esc> Close the board and its child windows
+
+    K opens a Markdown preview of the selected item; j, k, gg, G, <C-d>,
+    and <C-u> scroll it; q or <Esc> closes only the preview. <CR> opens
+    an Issue in a new tab as `github://<owner>/<repo>/issues/<number>`,
+    a PR in the browser, and a draft Issue in the preview. A redacted
+    item cannot be previewed, moved, or opened. <C-o> opens an Issue or
+    PR URL in the browser, and ghy writes it to the + register. Draft
+    and redacted items report that they have no URL. Browser and
+    clipboard failures are reported; an unconfirmed clipboard result is
+    not reported as success.
+
+    ghs opens a one-line filter with the current filter as its initial
+    value. Enter applies it; q or <C-c> cancels. An empty filter shows
+    all items; an unchanged filter does not reload. A filter that
+    matches no items is a successful empty result. A failed reload keeps
+    the previous items and filter. r reloads the same Project and filter
+    and keeps the selection by item ID. ? opens the key help for the
+    list, board, field editing, and add/delete screens and keeps the
+    board; j, k, gg, and G scroll the help. q or <Esc> closes the
+    board and its child windows, returning to the Project list when the
+    board was opened from it, or to the original window.
+
+FIELD EDITING
+
+    ghe lists the selected item's editable fields. Editable fields are
+    custom single-select, text, number, and date fields; built-in fields
+    such as Title, Assignees, and Labels are not listed and remain
+    available through the Issue operations. Each row shows
+    `<name>  <current value>`, or `未設定` when the field has no value.
+    When there are no editable fields, `No editable fields` is shown and
+    the window stays open. Selecting a column header or an empty column
+    reports that an item must be selected and opens no editor. Opening
+    ghe again on the same board reuses the editor and updates it for the
+    selected item.
+
+    j and k select a field; <CR> edits it; q or <Esc> closes the field
+    editor and returns to the board. The editor is a child of the board,
+    so closing the board closes it and its child windows.
+
+Field editor:
+    Key       Action
+    ------------------------------------------------------------------------
+    j / k     Select the previous / next field
+    <CR>      Edit the selected field
+    q / <Esc> Close the field editor
+
+    A single-select field opens its options. Each option shows
+    `● <name>`, the current value is marked, and the options end with
+    `値を解除` to clear the value.
+    j and k select an option; <CR> applies it or clears the value; q or
+    <Esc> cancels and returns to the field editor. Applying the same
+    value sends no update and closes the options. A failed update keeps
+    the options open and the selection, and does not change the board.
+
+Single-select options:
+    Key       Action
+    ------------------------------------------------------------------------
+    j / k     Select the previous / next option
+    <CR>      Apply the option, or clear the value
+    q / <Esc> Cancel and return to the field editor
+
+    A text, number, or date field opens a one-line input with the
+    current value. The field name and type are shown as the border
+    title. Enter applies the value; <C-c> cancels. In Normal mode, q
+    cancels. An empty input clears the field. A number must be a finite
+    number; a date must be a real `YYYY-MM-DD` date between 0001 and
+    9999. Invalid input is not sent and keeps the input with a reason.
+    A failed update keeps the input and does not change the board.
+
+One-line input:
+    Key       Action
+    ------------------------------------------------------------------------
+    <CR>      Apply the value
+    <C-c>     Cancel
+    q         Cancel in Normal mode
+
+    An update sends only the selected field and never rewinds other
+    fields. The response updates the field editor and the local board;
+    no automatic reload or resend follows. A change to the group field
+    moves the item to its new column; other single-select changes keep
+    the item in its column. The selection is kept by item ID.
+
+ADDING AND DELETING ITEMS
+
+    ghn opens a choice between `既存のIssue/PR` and `下書きIssue`.
+    j and k select an entry; <CR> continues; q or <Esc> cancels. The
+    choice is available even when a column header is selected, and the
+    item is added to the same Project.
+
+Add choice:
+    Key       Action
+    ------------------------------------------------------------------------
+    j / k     Select the previous / next entry
+    <CR>      Continue
+    q / <Esc> Cancel and return to the board
+
+Existing item input:
+    Key       Action
+    ------------------------------------------------------------------------
+    <CR>      Add the item
+    <C-c>     Cancel
+    q         Cancel in Normal mode
+
+    For an existing item, enter a URL or `owner/repo#number` at the
+    `Issue/PR URL or owner/repo#number` prompt. These forms are
+    accepted:
+>
+    https://github.com/<owner>/<repo>/issues/<number>
+    https://github.com/<owner>/<repo>/pull/<number>
+    <owner>/<repo>#<number>
+<
+    A trailing `/` is accepted; query strings, fragments, and extra path
+    segments are rejected. Enter adds the item; <C-c> cancels. Invalid
+    input, an unresolved Issue/PR, and failures keep the input and show
+    the reason. Adding an item that is already in the Project returns
+    the existing item and reports that no duplicate was created.
+    Temporary conflicts show the reason and accept another attempt. The
+    added item is selected at the end of its column. When the current
+    filter does not match it, the board does not show it and reports
+    that the filter must be cleared. Adding is idempotent, so a retry
+    does not create duplicates.
+
+Draft title:
+    Key       Action
+    ------------------------------------------------------------------------
+    <CR>      Continue to the body
+    <C-c>     Cancel the flow
+    q         Cancel in Normal mode
+
+Draft body:
+    Key       Action
+    ------------------------------------------------------------------------
+    <C-s>     Add the draft Issue
+    q / <Esc> Close the body and return to the title
+
+    For a draft Issue, enter a title (`Draft title`); Enter moves to the
+    body and <C-c> cancels the flow. A title that is empty or only
+    whitespace is not sent and keeps the title input with a reason. The
+    body is a Markdown buffer with the prompt
+    `Draft body (C-s to add, q/Esc to cancel)`; <C-s> adds the draft,
+    and q or <Esc> closes only the body and returns to the title. The
+    body may be empty. A failure keeps the body and input. Each draft
+    creates a new item, so duplicates are not checked.
+
+    ghd opens a confirmation for the selected item:
+>
+    Delete this item from the project?
+    Issue #12 Fix the title
+    y: delete  n/q/Esc: cancel
+<
+    The second line shows the item's type, number, and title; a
+    redacted item shows `[redacted]`. y deletes the item; n, q, or
+    <Esc> cancels. Deletion removes only the item from the Project; the
+    Issue or PR itself is not deleted. A failure keeps the confirmation
+    open and accepts another y or a cancel. An item that is already
+    gone is not reported as deleted; the board is kept and r reloads
+    it. After deletion, the selection moves to the next item, then the
+    previous item, then the column header. A redacted item can be
+    deleted, but it cannot be previewed, moved, or opened.
+
+Delete confirmation:
+    Key       Action
+    ------------------------------------------------------------------------
+    y         Delete the item from the Project
+    n / q / <Esc> Cancel
+
+SETTINGS
+
+    |github-setup| documents `projects` in require("github").setup().
+    `group_by` selects the single-select field used for columns (default
+    `Status`); when it does not match, the first single-select field is
+    used, and without one the board has a single column. `column_width`
+    sets the column width (20-80, default 36). `max_items` limits fetched
+    items (1-10000, default 1000). New values apply from the next fetch
+    or redraw; existing float windows are not closed. See |github-limits|
+    for the Projects limits.
+
+==============================================================================
 KEY MAPPINGS                 *github-key-mappings* *github-default-key-mappings*
 
 Mappings are buffer-local and use the original gh Plug names for custom keys.
@@ -398,6 +684,10 @@ Comment list:
     ghy       *<Plug>(gh:issue:comment:yank)*             Copy URL(s)
     <C-o>     *<Plug>(gh:issue:comment:view)*             Open in browser
 
+Project screens use fixed buffer-local keys and expose no Plug mappings.
+See |github-projects| for the Project list, board, field editing, and
+add/delete keys.
+
 For example, remap a custom key after opening an Issue list:
 >lua
     vim.keymap.set("n", "<leader>ge", "<Plug>(gh:issue:edit)",
@@ -419,6 +709,18 @@ COMMANDS                                                    *github-commands*
     :GitHub pulls
     :GitHub issues skanehira/github.nvim
     :GitHub pulls skanehira/github.nvim
+<
+:GitHub projects [owner] [number]
+    Open the Project list for owner, or the board of a Project. Without
+    owner, the authenticated user is used. `@me` also means the
+    authenticated user. A numeric first argument is a Project number.
+    Projects are shown in float windows and have no github:// URI; see
+    |github-projects|.
+>
+    :GitHub projects
+    :GitHub projects skanehira
+    :GitHub projects skanehira 12
+    :GitHub projects 12
 <
 :GitHub related-pr {commit}
 :GitHub related-pr {owner/repo} {commit}
@@ -498,6 +800,34 @@ LIMITS                                                       *github-limits*
   update. Each request changes only the selected field.
 - Completion, Actions, PR reviews, Gists, repository-file browsing, and README
   buffers are not implemented. Actions and review integration are future work.
+- Projects are float-window screens without github:// URIs or HTTPS entries.
+  They require gh authentication, and some operations also require the
+  `project` scope. Missing preparation is reported without opening a window.
+  Opening a closed Project by number reports that it is closed and opens no
+  board.
+- Project lists show at most 100 open Projects without page navigation;
+  closed Projects are not listed. Fields are limited to the first 50 and
+  views to the first 10. Items are fetched 100 per page up to `max_items`
+  (default 1000), and truncation is displayed. Reload with r to fetch again.
+- Project views are not switched or saved; the lowest-numbered view's filter
+  is the initial filter. Item reordering, archiving, multi-select and
+  iteration editing, creating or editing Projects and fields, and editing a
+  draft Issue's title or body after creation are not provided. Projects
+  expose no <Plug> mappings and do not support mouse operations. Each tab
+  manages its own Project windows; screens in another tab are not operated
+  on.
+- Project filters are evaluated by GitHub. An invalid filter may return no
+  items instead of an error; zero items is shown as a successful result and
+  the filter syntax is not validated.
+- Project writes update the local board from the mutation response and do
+  not reload or resend automatically. Reads immediately after a write can be
+  stale for about 0-3 seconds; r is authoritative. An update sends only the
+  selected field. Concurrent edits follow GitHub's last accepted update.
+- Built-in Project fields (Title, Assignees, Labels, and others) are edited
+  through the existing Issue operations, not the field editor. Items whose
+  content cannot be read are shown as [redacted]; they can be deleted from
+  the Project but cannot be previewed, moved, or opened. Draft Issues have
+  no URL.
 
 ==============================================================================
 FAQ                                                            *github-faq*
