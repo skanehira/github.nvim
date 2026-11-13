@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>保留レビュー項目: issue #48</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 960px; line-height: 1.6; color: #1f2328; }
+  h1 { font-size: 1.4rem; }
+  .item { border: 1px solid #d0d7de; border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+  .item h2 { font-size: 1rem; margin: 0 0 .5rem; }
+  .meta { color: #57606a; font-size: .85rem; }
+  .severity-medium { border-left: 4px solid #bf8700; }
+  dl { display: grid; grid-template-columns: 8rem 1fr; gap: .25rem 1rem; margin: .75rem 0 0; }
+  dt { font-weight: 600; }
+  dd { margin: 0; }
+  code { background: #f6f8fa; padding: .1rem .3rem; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>保留レビュー項目: issue #48（Projects の float UI）</h1>
+<p>dev-impl のレビューで medium と判定され、merge を止めずに事後確認へ回した項目です。チェックして対応したら、このファイルを削除してください。</p>
+<section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>ヘルプに &lt;C-d&gt;/&lt;C-u&gt;、1行入力の通常モードに &lt;C-c&gt; を追加しており、DESIGN.md の固定キーマップ一覧に無いキーが登録される。</h2>
+  <p class="meta">medium / spec-compliance / <code>lua/github/features/projects/ui.lua:523</code></p>
+  <dl>
+    <dt>summary</dt><dd>ヘルプに &lt;C-d&gt;/&lt;C-u&gt;、1行入力の通常モードに &lt;C-c&gt; を追加しており、DESIGN.md の固定キーマップ一覧に無いキーが登録される。</dd>
+    <dt>evidence</dt><dd>設計: DESIGN.md:83 はヘルプ j/k/gg/G/q/&lt;Esc&gt;、入力は &lt;CR&gt;/&lt;C-c&gt; と通常モードの q、projects-ui.md:40/127 も同じ。実装: ui.lua:137-160 の scroll_maps は &lt;C-d&gt;/&lt;C-u&gt; を含み、open_help (ui.lua:523) がそれをそのまま使う。open_input (ui.lua:410-411) は通常モードの &lt;C-c&gt; も登録する。走査: 入力=通常 C-c が余分、確認=y/n/q/Esc で一致、プレビュー=scroll_maps+q/Esc で一致、ヘルプ=C-d/C-u が余分、選択=j/k/CR/q/Esc で一致。一覧・ボード・フィールド編集は未実装。テスト: ui_spec:488 は通常 C-c を要求として固定し、ヘルプのテスト (ui_spec:688-690) は j/k/gg/G/q/Esc のみで C-d/C-u の不在を固定していない。</dd>
+    <dt>fix_hint</dt><dd>ヘルプは j/k/gg/G/q/&lt;Esc&gt; だけの専用マップにし、入力から通常モードの &lt;C-c&gt; を外す。ui_spec で各画面のキー集合を設計どおり完全一致で固定する（余分なキーが無いことも assert する）。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>GitHubProjectsCard は定義のみでカード行に適用されず、選択列ヘッダでは Color* が ColumnSelected に置き換わる。default=true もテストで未検証。</h2>
+  <p class="meta">medium / spec-compliance / <code>lua/github/features/projects/ui.lua:264</code></p>
+  <dl>
+    <dt>summary</dt><dd>GitHubProjectsCard は定義のみでカード行に適用されず、選択列ヘッダでは Color* が ColumnSelected に置き換わる。default=true もテストで未検証。</dd>
+    <dt>evidence</dt><dd>設計: projects-ui.md:50 は GitHubProjectsCard=項目カード、49 は ColumnSelected=選択中の列ヘッダ、58-65 は Color*=選択肢の色、67 は利用者が :hi で上書きできると規定する。projects-board.md:27 は列ヘッダに選択肢の色を付けて選択中を強調、39 は描画の詳細（ハイライト含む）を projects-ui の規則に委譲する。実装: highlight.lua:21-39 の19グループを走査。Header/Column/ColumnSelected/CardSelected/Number/Meta/Progress/Redacted/Error/Loading/Color* は適用されるが、Card は ui.card/ui.push から一度も出ず未適用。Color* は非選択時 (ui.lua:317-326) のみで、選択時 (ui.lua:310-315) は ColumnSelected が全域を覆い色が失われる。テスト: ui_spec:376-401 は19グループの link のみを検証し、default=true と Card/Color* の適用を固定していない（default=false に変異させても通る）。</dd>
+    <dt>fix_hint</dt><dd>非選択カードの各行に GitHubProjectsCard を適用し、選択列ヘッダでは色マーカーに Color*、残りに ColumnSelected を付ける（または設計の意図を確認して片方に寄せる）。ui_spec で default=true と Card/Color* の extmark を固定する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>固定高さ画面の VimResized 規則が projects-ui.md:28 と :37 で矛盾し、高さ再計算の有無が一意でない。</h2>
+  <p class="meta">medium / spec-compliance / <code>docs/design/features/projects-ui.md:37</code></p>
+  <dl>
+    <dt>summary</dt><dd>固定高さ画面の VimResized 規則が projects-ui.md:28 と :37 で矛盾し、高さ再計算の有無が一意でない。</dd>
+    <dt>evidence</dt><dd>設計: projects-ui.md:28 は『固定高さの画面（1行入力・確認・追加の選択）はheightとfixed_height=trueで開き、幅だけを比率で再計算する』、:37 は『VimResizedで全画面の幅・高さ・中央配置を再計算する』と規定する。実装: ui.lua:368-376/427-435/536-552 は固定高さ画面をfixed_height=trueで開き、float.lua:246-269 のresize_allはfixed_height時にentry.heightを維持する。テスト: ui_spec.lua:802-804 はinput/confirm/choiceの高さ不変を固定し、float_spec.lua:195-204 も固定高さを固定する。docsの更新は:28のみで:37が未更新のため、固定高さ画面の高さ再計算の有無が設計上矛盾する。</dd>
+    <dt>fix_hint</dt><dd>projects-ui.md:37 を『固定高さ画面は高さを保ち、幅と中央配置を再計算する』に更新する。DESIGN.md 横断規約の VimResized 記述も同じ例外に揃える。</dd>
+  </dl>
+</section>
+</body>
+</html>
