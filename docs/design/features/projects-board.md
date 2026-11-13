@@ -13,7 +13,7 @@ UC-015の利用者操作を実現する。対象規則はBR-063〜BR-071。一�
 ### ボードの状態
 
 - ボードは`{project, fields, group_field, columns, items, view, filter, selected, offsets, first_col, visible, loading, error, generation, truncated, body_cache}`を保持する。
-- `columns`はグループフィールドの選択肢順に作り、値のない項目を末尾の値なし列に置く。グループフィールドの値が現在の選択肢にない項目も値なし列に置く。各列は`{key, name, color, items}`を持つ。単一選択フィールドがない場合は1列（`key=nil`）とする。
+- `columns`はグループフィールドの選択肢順に作り、値のない項目を末尾の値なし列に置く。グループフィールドの値が現在の選択肢にない項目も値なし列に置く。各列は`{key, name, color, items, count}`を持つ。値なし列は`{key=nil, no_value=true, name="値なし", items, count}`とする。単一選択フィールドがない場合は1列（`key=nil`）とする。
 - `items`はAPIの項目位置順を保つ。項目は`{id, type, content, values, archived}`で、列の値はグループフィールドIDで引く。
 - `selected`は`{column_index, item_id}`。空の列を選んだ場合は`item_id=nil`とし、列ヘッダを選択状態にする。
 - `offsets`は列ごとの先頭項目のindex（1始まり）。`first_col`は表示する先頭列のindex、`visible`は表示列数。
@@ -24,6 +24,7 @@ UC-015の利用者操作を実現する。対象規則はBR-063〜BR-071。一�
 ### 描画
 
 - 1行目は`<owner> / <title>  ·  <items> items  ·  filter: <filter>`を表示する。フィルタが先頭ビュー由来なら`view: <name>  ·  filter: <filter>`とする。読み込み中は`Loading <fetched>/<total>...`、打ち切り時は`Showing <max_items> of <total>`、失敗時は`Error: <理由>`を表示する。
+- Project詳細の取得に失敗した場合はボードを開かず、理由を通知する。項目の取得に失敗した場合は、既に開いているボードのヘッダに`Error: <理由>`を表示し、直前の内容を保持する。
 - 2行目は列ヘッダを表示する。`● <name> <count>`とし、選択肢の色を付ける。値なし列は`○ 値なし <count>`とする。選択中の列ヘッダを強調する。
 - 列幅は実効幅`min(column_width, inner_width)`（既定36、20〜80）とし、列の区切りは`│`の1セル。表示列数は`max(1, floor((inner_width + 1) / (effective_column_width + 1)))`とする。選択列が画面外に出るときは`first_col`を調整する。
 - 列ごとに独立した縦の表示位置を持つ。`j`/`k`では選択中の列だけをスクロールし、他の列の位置を変えない。選択カードが表示領域より高い場合は先頭行を表示し、カーソルを先頭行に置く。
@@ -114,6 +115,10 @@ query($owner: String!, $repo: String!, $number: Int!) {
 ブラウザとクリップボードは既存の共通adapterを使う。Projectsは`github://` URIを持たないが、Issueを開くときは既存のIssue URIを使う。共通契約はDESIGN.md「GitHub API一覧」を参照する。
 
 `board.lua`はフィールド編集と項目の追加・削除のために、次のモジュールAPIを公開する。`board.state(buf)`はボードの状態を返す。`board.selected_item(buf)`は選択中の項目を返す。`board.update_field(buf, item_id, field_id, value)`はフィールド値のローカル更新、グループフィールドなら列移動、選択の維持、再描画を行う。`board.add_item(buf, item)`と`board.remove_item(buf, item_id)`は項目の追加・削除をローカル状態へ反映し、再描画する。`board.select_item(buf, item_id)`は項目IDで選択を設定する。`board.refresh(buf)`は同じ条件で再取得する。これらのAPIは`board.lua`が所有し、フィールド編集と項目管理の機能は`board.lua`を変更しない。
+
+`ghe`は`github.features.projects.field_edit.open(buf)`、`ghn`は`github.features.projects.item_manage.open_add(buf)`、`ghd`は`github.features.projects.item_manage.open_delete(buf)`を遅延requireして呼ぶ。モジュールが未実装の場合は`GitHub projects: <module> is not available`を案内する。
+
+API層の項目`content`は`total_count`、`sub_issues`、`related_pulls`を持つが、`ui.card`は`totalCount`、`subIssuesSummary`、`closedByPullRequestsReferences`を読む。ボードは描画時にこれらの名前へ詰め替え、API層と共通UIのどちらも変更しない。
 
 ## 実装の配置
 

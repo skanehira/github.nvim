@@ -1,5 +1,46 @@
 local M = {}
 
+local function valid_login(value)
+  return value:match("^[%w]$") ~= nil or value:match("^[%w][%w%-]*[%w]$") ~= nil
+end
+
+local function valid_number(value)
+  if value:match("^%d+$") == nil then
+    return nil
+  end
+  local number = tonumber(value)
+  if not number or number <= 0 or number ~= math.floor(number) then
+    return nil
+  end
+  return number
+end
+
+local function parse_projects(args)
+  local count = #args - 1
+  if count > 2 then
+    return nil
+  end
+  if count == 0 then
+    return { owner = nil, number = nil }
+  end
+  if count == 1 then
+    local value = args[2]
+    if value:match("^%d+$") then
+      local number = valid_number(value)
+      return number and { owner = nil, number = number } or nil
+    end
+    if value ~= "@me" and not valid_login(value) then
+      return nil
+    end
+    return { owner = value, number = nil }
+  end
+  local owner, number = args[2], valid_number(args[3])
+  if number == nil or (owner ~= "@me" and not valid_login(owner)) then
+    return nil
+  end
+  return { owner = owner, number = number }
+end
+
 function M.setup(opts)
   opts = opts or {}
   local notify = opts.notify or vim.notify
@@ -7,6 +48,17 @@ function M.setup(opts)
   local generation = 0
   vim.api.nvim_create_user_command("GitHub", function(command)
     local args = command.fargs
+    if args[1] == "projects" then
+      local parsed = parse_projects(args)
+      if not parsed then
+        return notify("Usage: GitHub projects [owner] [number]", vim.log.levels.ERROR)
+      end
+      return require("github.features.projects.list").open({
+        owner = parsed.owner,
+        number = parsed.number,
+        parent_win = vim.api.nvim_get_current_win(),
+      })
+    end
     local repo = require("github.core.repo")
     if args[1] == "related-pr" then
       local target
