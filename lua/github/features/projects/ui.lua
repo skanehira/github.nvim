@@ -467,7 +467,21 @@ function M.open_confirm(opts)
   return { win = win, buf = buf, close = close }
 end
 
+local function render_preview(win, buf, opts)
+  local header, spans = M.header({ text = opts.header, loading = opts.loading, error = opts.error })
+  local lines = { header }
+  if opts.body and opts.body ~= "" then
+    for _, line in ipairs(vim.split((opts.body:gsub("\r\n", "\n")), "\n", { plain = true })) do
+      lines[#lines + 1] = line
+    end
+  end
+  M.set_lines(buf, lines)
+  M.apply(buf, spans)
+  vim.api.nvim_win_set_cursor(win, { 1, 0 })
+end
+
 function M.open_preview(opts)
+  local tab = vim.api.nvim_get_current_tabpage()
   local width, height = float.target_size(opts.width_ratio or 0.7, opts.height_ratio or 0.7)
   local win, buf = float.open({
     name = opts.name,
@@ -479,16 +493,7 @@ function M.open_preview(opts)
   -- The screen filetype is gh-projects-preview while the body is rendered as markdown;
   -- the custom filetype has no syntax of its own, so select markdown explicitly.
   vim.bo[buf].syntax = "markdown"
-  local header, spans = M.header({ text = opts.header, loading = opts.loading, error = opts.error })
-  local lines = { header }
-  if opts.body and opts.body ~= "" then
-    for _, line in ipairs(vim.split((opts.body:gsub("\r\n", "\n")), "\n", { plain = true })) do
-      lines[#lines + 1] = line
-    end
-  end
-  M.set_lines(buf, lines)
-  M.apply(buf, spans)
-  vim.api.nvim_win_set_cursor(win, { 1, 0 })
+  render_preview(win, buf, opts)
 
   local function close()
     float.close(opts.name)
@@ -497,7 +502,24 @@ function M.open_preview(opts)
   maps.q = close
   maps["<Esc>"] = close
   M.keymaps(buf, { n = maps })
-  return { win = win, buf = buf, close = close }
+  return { win = win, buf = buf, tab = tab, close = close }
+end
+
+function M.update_preview(screen, opts)
+  if type(screen) ~= "table" or not screen.win or not screen.buf or not screen.tab then
+    return false
+  end
+  if not vim.api.nvim_win_is_valid(screen.win) or not vim.api.nvim_buf_is_valid(screen.buf) then
+    return false
+  end
+  if vim.api.nvim_win_get_buf(screen.win) ~= screen.buf then
+    return false
+  end
+  if vim.api.nvim_win_get_tabpage(screen.win) ~= screen.tab then
+    return false
+  end
+  render_preview(screen.win, screen.buf, opts)
+  return true
 end
 
 function M.open_help(opts)

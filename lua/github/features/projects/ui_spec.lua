@@ -667,6 +667,35 @@ describe("projects ui", function()
       handle = ui.open_preview({ name = "projects-preview:empty", parent = parent, header = "Issue #8", body = "" })
       assert.same({ "Issue #8" }, vim.api.nvim_buf_get_lines(handle.buf, 0, -1, false))
     end)
+
+    it("updates a preview in place and discards a closed or moved screen", function()
+      local parent = vim.api.nvim_get_current_win()
+      local handle = ui.open_preview({
+        name = "projects-preview:update",
+        parent = parent,
+        header = "Issue #7",
+        loading = "Loading body...",
+      })
+
+      assert.is_true(ui.update_preview(handle, { header = "Issue #7 Title", body = "first\nsecond" }))
+      assert.same({ "Issue #7 Title", "first", "second" }, vim.api.nvim_buf_get_lines(handle.buf, 0, -1, false))
+      assert.equals(handle.win, vim.api.nvim_get_current_win())
+
+      vim.cmd("tabnew")
+      local other = vim.api.nvim_get_current_win()
+      local other_tab = vim.api.nvim_get_current_tabpage()
+      assert.is_true(ui.update_preview(handle, { header = "Issue #7 Title", body = "body from another tab" }))
+      assert.same({ "Issue #7 Title", "body from another tab" }, vim.api.nvim_buf_get_lines(handle.buf, 0, -1, false))
+      assert.equals(other, vim.api.nvim_get_current_win())
+
+      assert.is_false(
+        ui.update_preview({ win = handle.win, buf = handle.buf, tab = other_tab }, { header = "Issue #7 Title" })
+      )
+
+      vim.cmd("tabnext 1")
+      handle.close()
+      assert.is_false(ui.update_preview(handle, { header = "Issue #7 Title", body = "late body" }))
+    end)
   end)
 
   describe("help screen", function()
