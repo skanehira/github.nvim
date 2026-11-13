@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>保留レビュー項目: issue #52</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 960px; line-height: 1.6; color: #1f2328; }
+  h1 { font-size: 1.4rem; }
+  .item { border: 1px solid #d0d7de; border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+  .item h2 { font-size: 1rem; margin: 0 0 .5rem; }
+  .meta { color: #57606a; font-size: .85rem; }
+  .severity-medium { border-left: 4px solid #bf8700; }
+  dl { display: grid; grid-template-columns: 8rem 1fr; gap: .25rem 1rem; margin: .75rem 0 0; }
+  dt { font-weight: 600; }
+  dd { margin: 0; }
+  code { background: #f6f8fa; padding: .1rem .3rem; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>保留レビュー項目: issue #52（Projects の項目追加・削除）</h1>
+<p>dev-impl のレビューで medium と判定され、merge を止めずに事後確認へ回した項目です。チェックして対応したら、このファイルを削除してください。</p>
+<section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>filter_matchが既知の不一致termを先に見つけると即falseを返すため、同じフィルタに未知の修飾子が含まれていても『一致しない』と断定する。設計projects-item-manage.md:62は未知の修飾子を含む場合に一致を断定せずフィルタ解除を案内するとしており、案内文が誤って『does not match』になる。</h2>
+  <p class="meta">medium / spec-compliance / <code>lua/github/features/projects/item_manage.lua:339</code></p>
+  <dl>
+    <dt>summary</dt><dd>filter_matchが既知の不一致termを先に見つけると即falseを返すため、同じフィルタに未知の修飾子が含まれていても『一致しない』と断定する。設計projects-item-manage.md:62は未知の修飾子を含む場合に一致を断定せずフィルタ解除を案内するとしており、案内文が誤って『does not match』になる。</dd>
+    <dt>evidence</dt><dd>コード: item_manage.lua:326-348のfilter_matchは各termを順に評価し、`if matched == false then return false`（:338-339）で未知termの追跡（unknown）より先に確定する。例: フィルタ`status:Done has:label`でstatusがTodoの項目は、status:Doneのfalseで即falseになり、has:labelのunknown（term_matchesのelse分岐が:306-318でnil）を無視する。設計: projects-item-manage.md:62。テスト: item_manage_spec.lua:992-1016は引用符だけで、未知の修飾子（has:label等）と既知falseの混在を固定していない。</dd>
+    <dt>fix_hint</dt><dd>全termを評価してfalseとunknownを集計し、unknownが1つでもあればnilを返す（falseよりunknownを優先）。`status:Done has:label`のような混在フィルタのテストを追加し、案内がADD_FILTER_UNKNOWNになることを固定する。</dd>
+  </dl>
+</section><section class="item severity-medium" data-severity="medium" data-category="spec-compliance">
+  <h2>追加mutationの応答がアーカイブ済み項目（isArchived=true）でもboard.add_itemでモデルに追加するため、ボードがアーカイブ済み項目を描画する。projects-board.md:137/161はアーカイブ済みを表示しないとしており、設計projects-item-manage.md:32が『アーカイブ済み』をモデル外の既存項目として追加対象に挙げる記述と矛盾する。</h2>
+  <p class="meta">medium / spec-compliance / <code>lua/github/features/projects/item_manage.lua:430</code></p>
+  <dl>
+    <dt>summary</dt><dd>追加mutationの応答がアーカイブ済み項目（isArchived=true）でもboard.add_itemでモデルに追加するため、ボードがアーカイブ済み項目を描画する。projects-board.md:137/161はアーカイブ済みを表示しないとしており、設計projects-item-manage.md:32が『アーカイブ済み』をモデル外の既存項目として追加対象に挙げる記述と矛盾する。</dd>
+    <dt>evidence</dt><dd>コード: item_manage.lua:424-431のfinish_addはduplicate/filter判定の後、board.add_item(buf, item)を無条件に呼ぶ。api.lua:448-467のparse_itemはarchived=node.isArchived==trueを保持する。board.lua:85-116のbuild_columnsはstate.itemsをarchivedで除外せず、board.lua:422のfetch_itemsだけがarchivedを除外する。設計: projects-item-manage.md:32は『モデルにない既存項目（フィルタ外・max_items外・アーカイブ済み）は、応答の項目を追加し』とし、projects-board.md:137は『アーカイブ済みは表示しない』、:161の受け入れ基準も同じ。テスト: item_manage_spec.luaにisArchived=trueの追加応答のケースがない（:831-855はグループ値なし、:887-914はラベル一致のみ）。</dd>
+    <dt>fix_hint</dt><dd>設計の矛盾を解消する。アーカイブ済みを表示しないなら、finish_addでitem.archivedをfilter不一致と同様に扱ってboard.add_itemを呼ばず『アーカイブ済みのため表示しない。rで再取得』を案内する（またはboard.add_item側でarchivedを除外する。ただしboard.luaは非スコープ）。isArchived=trueの追加応答テストを追加する。</dd>
+  </dl>
+</section>
+</body>
+</html>
