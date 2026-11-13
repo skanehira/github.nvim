@@ -23,11 +23,13 @@ local function screen_name(owner)
 end
 
 local function win_for(buf)
-  local win = vim.fn.bufwinid(buf)
-  if win == -1 or not vim.api.nvim_win_is_valid(win) then
-    return nil
+  for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
+      if vim.api.nvim_win_get_buf(win) == buf then
+        return win
+      end
+    end
   end
-  return win
 end
 
 local function type_name(type)

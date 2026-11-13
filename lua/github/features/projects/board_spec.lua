@@ -578,6 +578,145 @@ describe("projects board", function()
     assert.is_nil(current_window("gh-projects-preview"))
   end)
 
+  it("updates the preview that started the body request when another tab has the same preview", function()
+    open_board(1)
+    respond(1, detail_response(1, "Board"))
+    respond(2, items_response(default_items()))
+
+    key("K")
+    local first_preview = current_window("gh-projects-preview")
+    assert.same({ "Loading body..." }, list_lines(first_preview))
+
+    vim.cmd("tabnew")
+    local second_tab = vim.api.nvim_get_current_tabpage()
+    open_board(1)
+    respond(4, detail_response(1, "Board"))
+    respond(5, items_response(default_items()))
+    key("K")
+    local second_preview = current_window("gh-projects-preview")
+    assert.same({ "Loading body..." }, list_lines(second_preview))
+
+    respond(3, { data = { repository = { issueOrPullRequest = { __typename = "Issue", body = "Body from tab1" } } } })
+    assert.same({ "Issue #1 Fix bug", "Body from tab1" }, list_lines(first_preview))
+    assert.same({ "Loading body..." }, list_lines(second_preview))
+    assert.equals(second_tab, vim.api.nvim_get_current_tabpage())
+    assert.equals(second_preview, vim.api.nvim_get_current_win())
+
+    respond(6, { data = { repository = { issueOrPullRequest = { __typename = "Issue", body = "Body from tab2" } } } })
+    assert.same({ "Issue #1 Fix bug", "Body from tab2" }, list_lines(second_preview))
+    assert.same({ "Issue #1 Fix bug", "Body from tab1" }, list_lines(first_preview))
+  end)
+
+  it("updates the preview that started the body request after switching to a tab without it", function()
+    open_board(1)
+    respond(1, detail_response(1, "Board"))
+    respond(2, items_response(default_items()))
+
+    key("K")
+    local preview = current_window("gh-projects-preview")
+    assert.same({ "Loading body..." }, list_lines(preview))
+
+    vim.cmd("tabnew")
+    local other_tab = vim.api.nvim_get_current_tabpage()
+    local other_win = vim.api.nvim_get_current_win()
+
+    respond(3, { data = { repository = { issueOrPullRequest = { __typename = "Issue", body = "Body text" } } } })
+    assert.same({ "Issue #1 Fix bug", "Body text" }, list_lines(preview))
+    assert.equals(other_tab, vim.api.nvim_get_current_tabpage())
+    assert.equals(other_win, vim.api.nvim_get_current_win())
+  end)
+
+  it("discards the earlier body response when the same preview is requested again", function()
+    open_board(1)
+    respond(1, detail_response(1, "Board"))
+    respond(2, items_response(default_items()))
+    local board_win = current_window("gh-projects-board")
+
+    key("K")
+    local preview = vim.api.nvim_get_current_win()
+    assert.same({ "Loading body..." }, list_lines(preview))
+    vim.api.nvim_set_current_win(board_win)
+    key("K")
+    assert.equals(preview, vim.api.nvim_get_current_win())
+    assert.same({ "Loading body..." }, list_lines(preview))
+    assert.equals(4, #pending)
+
+    respond(3, { data = { repository = { issueOrPullRequest = { __typename = "Issue", body = "Stale body" } } } })
+    assert.same({ "Loading body..." }, list_lines(preview))
+
+    respond(4, { data = { repository = { issueOrPullRequest = { __typename = "Issue", body = "Fresh body" } } } })
+    assert.same({ "Issue #1 Fix bug", "Fresh body" }, list_lines(preview))
+  end)
+
+  it("updates each preview when two items request their bodies at the same time", function()
+    open_board(1)
+    respond(1, detail_response(1, "Board"))
+    respond(
+      2,
+      items_response({
+        item_node({
+          id = "I1",
+          type = "ISSUE",
+          option = "todo",
+          option_name = "Todo",
+          content = issue_content(1, "First issue", empty_connection(), empty_connection()),
+        }),
+        item_node({
+          id = "I4",
+          type = "ISSUE",
+          option = "todo",
+          option_name = "Todo",
+          content = issue_content(4, "Second issue", empty_connection(), empty_connection()),
+        }),
+      }, 2)
+    )
+    local board_win = current_window("gh-projects-board")
+
+    key("K")
+    local first_preview = vim.api.nvim_get_current_win()
+    assert.same({ "Loading body..." }, list_lines(first_preview))
+    vim.api.nvim_set_current_win(board_win)
+    key("j")
+    key("K")
+    local second_preview = vim.api.nvim_get_current_win()
+    assert.is_true(first_preview ~= second_preview)
+    assert.same({ "Loading body..." }, list_lines(second_preview))
+    assert.equals(4, #pending)
+
+    respond(3, { data = { repository = { issueOrPullRequest = { __typename = "Issue", body = "Body one" } } } })
+    assert.same({ "Issue #1 First issue", "Body one" }, list_lines(first_preview))
+    assert.same({ "Loading body..." }, list_lines(second_preview))
+
+    respond(4, { data = { repository = { issueOrPullRequest = { __typename = "Issue", body = "Body two" } } } })
+    assert.same({ "Issue #4 Second issue", "Body two" }, list_lines(second_preview))
+    assert.same({ "Issue #1 First issue", "Body one" }, list_lines(first_preview))
+  end)
+
+  it("discards the body response when the preview was closed before it arrives", function()
+    open_board(1)
+    respond(1, detail_response(1, "Board"))
+    respond(2, items_response(default_items()))
+    local board_win = current_window("gh-projects-board")
+
+    key("K")
+    local preview = current_window("gh-projects-preview")
+    vim.api.nvim_set_current_win(preview)
+    key("q")
+    assert.is_nil(current_window("gh-projects-preview"))
+
+    respond(3, { data = { repository = { issueOrPullRequest = { __typename = "Issue", body = "Late body" } } } })
+    assert.equals(3, #pending)
+    assert.equals(board_win, vim.api.nvim_get_current_win())
+    assert.is_nil(current_window("gh-projects-preview"))
+
+    key("K")
+    local reopened = current_window("gh-projects-preview")
+    assert.same({ "Loading body..." }, list_lines(reopened))
+    assert.equals(4, #pending)
+    respond(4, { data = { repository = { issueOrPullRequest = { __typename = "Issue", body = "Fresh body" } } } })
+    assert.same({ "Issue #1 Fix bug", "Fresh body" }, list_lines(reopened))
+  end)
+
   it("opens issues, pull requests and drafts and rejects redacted items", function()
     open_board(1)
     respond(1, detail_response(1, "Board"))
@@ -852,6 +991,57 @@ describe("projects board", function()
     assert.equals(4, board.state(buf).first_col)
     assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
     assert.equals(ui.pad("○ 値なし 1", 36), list_lines(win)[2])
+  end)
+
+  it("renders the board that started the request when the items response arrives in another tab", function()
+    open_board(1)
+    respond(1, detail_response(1, "Board"))
+    local win, buf = current_window("gh-projects-board")
+    assert.same({
+      "Loading 0/4...",
+      ui.pad("● Todo 0", 36) .. "│" .. ui.pad("● In Progress 0", 36),
+      "No items",
+    }, list_lines(win))
+
+    vim.cmd("tabnew")
+    local other_tab = vim.api.nvim_get_current_tabpage()
+    local other_win = vim.api.nvim_get_current_win()
+    respond(2, items_response(default_items()))
+
+    local rendered = list_lines(win)
+    assert.equals("alice / Board  ·  4 items  ·  filter: ", rendered[1])
+    assert.equals(ui.pad("○ #1 Fix bug", 36) .. "│" .. ui.pad("⇄ #2 Add feature", 36), rendered[3])
+    assert.same({ column_index = 1, item_id = "I1" }, board.state(buf).selected)
+    assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert.equals(other_tab, vim.api.nvim_get_current_tabpage())
+    assert.equals(other_win, vim.api.nvim_get_current_win())
+  end)
+
+  it("recomputes the board layout after VimResized while another tab is current", function()
+    open_board(1)
+    respond(1, detail_response(1, "Board"))
+    respond(2, items_response(default_items()))
+    local win, buf = current_window("gh-projects-board")
+    key("l")
+    assert.same({ column_index = 2, item_id = "I2" }, board.state(buf).selected)
+    assert.equals(2, board.state(buf).visible)
+
+    vim.cmd("tabnew")
+    local other_tab = vim.api.nvim_get_current_tabpage()
+    local other_win = vim.api.nvim_get_current_win()
+
+    vim.o.columns, vim.o.lines = 80, 24
+    vim.api.nvim_exec_autocmds("VimResized", {})
+
+    local state = board.state(buf)
+    assert.equals(1, state.visible)
+    assert.equals(2, state.first_col)
+    assert.same({ column_index = 2, item_id = "I2" }, state.selected)
+    assert.equals(ui.pad("● In Progress 1", 36), list_lines(win)[2])
+    assert.equals(19, #list_lines(win))
+    assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert.equals(other_tab, vim.api.nvim_get_current_tabpage())
+    assert.equals(other_win, vim.api.nvim_get_current_win())
   end)
 
   it("updates fields, adds and removes items, and selects items", function()

@@ -54,11 +54,13 @@ local function board_name(owner, number)
 end
 
 local function win_for(buf)
-  local win = vim.fn.bufwinid(buf)
-  if win == -1 or not vim.api.nvim_win_is_valid(win) then
-    return nil
+  for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
+      if vim.api.nvim_win_get_buf(win) == buf then
+        return win
+      end
+    end
   end
-  return win
 end
 
 local function blank(width)
@@ -518,9 +520,11 @@ local function preview(buf)
     ui.open_preview({ name = name, parent = win, header = header, body = cached })
     return
   end
-  ui.open_preview({ name = name, parent = win, header = header, loading = "Loading body..." })
-  preview_generations[buf] = (preview_generations[buf] or 0) + 1
-  local generation = preview_generations[buf]
+  local screen = ui.open_preview({ name = name, parent = win, header = header, loading = "Loading body..." })
+  local generations = preview_generations[buf] or {}
+  preview_generations[buf] = generations
+  generations[name] = (generations[name] or 0) + 1
+  local generation = generations[name]
   local target = targets[buf]
   local api = require("github.features.projects.api").new()
   api.fetch_body(
@@ -528,18 +532,17 @@ local function preview(buf)
     item.content.repository,
     item.content.number,
     function(result, err)
-      if states[buf] ~= state or preview_generations[buf] ~= generation or not vim.api.nvim_buf_is_valid(buf) then
-        return
-      end
-      if not float.is_open(name) then
+      if states[buf] ~= state or generations[name] ~= generation or not vim.api.nvim_buf_is_valid(buf) then
         return
       end
       if not result then
-        ui.open_preview({ name = name, parent = win, header = header, error = reason(err) })
+        ui.update_preview(screen, { header = header, error = reason(err) })
+        return
+      end
+      if not ui.update_preview(screen, { header = header, body = result.body }) then
         return
       end
       state.body_cache[item.id] = result.body
-      ui.open_preview({ name = name, parent = win, header = header, body = result.body })
     end
   )
 end

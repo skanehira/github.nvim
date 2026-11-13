@@ -632,6 +632,49 @@ describe("projects list", function()
     assert.equals(36, vim.fn.strdisplaywidth(list_lines(board_win)[2]))
   end)
 
+  it("renders the list that started the request when the response arrives in another tab", function()
+    vim.cmd("GitHub projects")
+    respond(1, { login = "alice", type = "User" })
+    local win = current_window("gh-projects-list")
+    assert.same({ "Loading projects..." }, list_lines(win))
+
+    vim.cmd("tabnew")
+    local other_tab = vim.api.nvim_get_current_tabpage()
+    local other_win = vim.api.nvim_get_current_win()
+    respond(2, projects_page({ project_node(1, "First", 3, true) }))
+
+    assert.same({
+      "Projects for alice (user)  ·  1 open",
+      "#1 First  3 items  public",
+    }, list_lines(win))
+    assert.same({ 2, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert.equals(other_tab, vim.api.nvim_get_current_tabpage())
+    assert.equals(other_win, vim.api.nvim_get_current_win())
+  end)
+
+  it("re-renders the list after VimResized while another tab is current", function()
+    vim.cmd("GitHub projects")
+    respond(1, { login = "alice", type = "User" })
+    respond(2, projects_page({ project_node(1, string.rep("a", 60), 1, true) }))
+    local win = current_window("gh-projects-list")
+    assert.equals("#1 " .. string.rep("a", 60) .. "  1 items  public", list_lines(win)[2])
+
+    vim.cmd("tabnew")
+    local other_tab = vim.api.nvim_get_current_tabpage()
+    local other_win = vim.api.nvim_get_current_win()
+
+    vim.o.columns, vim.o.lines = 80, 24
+    vim.api.nvim_exec_autocmds("VimResized", {})
+
+    local rendered = list_lines(win)
+    assert.equals("Projects for alice (user)  ·  1 open", rendered[1])
+    assert.equals("#1 " .. string.rep("a", 31) .. "...  1 items  public", rendered[2])
+    assert.equals(54, vim.fn.strdisplaywidth(rendered[2]))
+    assert.same({ 2, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert.equals(other_tab, vim.api.nvim_get_current_tabpage())
+    assert.equals(other_win, vim.api.nvim_get_current_win())
+  end)
+
   it("ignores responses for a board or list that was closed before the response arrived", function()
     local parent = vim.api.nvim_get_current_win()
     vim.cmd("GitHub projects")
