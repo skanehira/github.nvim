@@ -788,7 +788,8 @@ function M.open(opts)
       return
     end
     local width, height = float.target_size(0.9, 0.9)
-    local _, buf = float.open({ name = name, parent = parent, width = width, height = height })
+    local win, buf = float.open({ name = name, parent = parent, width = width, height = height })
+    vim.wo[win].winhighlight = "FloatBorder:GitHubProjectsCardBorder"
     if states[buf] then
       targets[buf] = { host = resolved.host, owner = resolved.owner, type = resolved.type }
       fetch_items(buf, "refresh", states[buf].filter)
