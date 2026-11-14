@@ -27,7 +27,7 @@ describe("GitHub API adapter", function()
     local responses = {
       {
         { code = 1, signal = 0, stdout = "", stderr = "secret" },
-        { target = "github.com/o/r", reason = "GitHub request failed (exit 1)" },
+        { target = "github.com/o/r", reason = "GitHub request failed (exit 1): secret" },
       },
       {
         { code = 0, signal = 0, stdout = "invalid", stderr = "" },
@@ -48,6 +48,55 @@ describe("GitHub API adapter", function()
       end)
       assert.same(pair[2], failure)
     end
+  end)
+
+  it("adds the first non-empty stderr line to a failed request", function()
+    local gh = require("github.core.gh")
+    local cases = {
+      {
+        stderr = "gh: Not Found (HTTP 404)\nsecond line",
+        reason = "GitHub request failed (exit 1): Not Found (HTTP 404)",
+        status = 404,
+      },
+      {
+        stderr = "\n  \ngh: rate limited\n",
+        reason = "GitHub request failed (exit 1): rate limited",
+      },
+      {
+        stderr = "gh: ",
+        reason = "GitHub request failed (exit 1)",
+      },
+      {
+        stderr = "",
+        reason = "GitHub request failed (exit 1)",
+      },
+      {
+        stderr = nil,
+        reason = "GitHub request failed (exit 1)",
+      },
+    }
+    for _, case in ipairs(cases) do
+      local failure
+      local adapter = gh.new(function(_, _, cb)
+        cb({ code = 1, stdout = "", stderr = case.stderr })
+      end)
+      adapter.graphql({ host = "github.com", owner = "o" }, "query {x}", {}, function(_, err)
+        failure = err
+      end)
+      assert.equals(case.reason, failure.reason)
+      assert.equals(case.status, failure.status)
+    end
+  end)
+
+  it("truncates a long stderr line without splitting a character", function()
+    local failure
+    local adapter = require("github.core.gh").new(function(_, _, cb)
+      cb({ code = 1, stdout = "", stderr = string.rep("あ", 250) })
+    end)
+    adapter.graphql({ host = "github.com" }, "query {x}", {}, function(_, err)
+      failure = err
+    end)
+    assert.equals("GitHub request failed (exit 1): " .. string.rep("あ", 200) .. "...", failure.reason)
   end)
 
   it("rejects repeated pagination cursors", function()
@@ -162,8 +211,14 @@ describe("target names and error details", function()
     end)
     adapter.graphql({ host = "github.com" }, "query {x}", {}, capture(1))
     adapter.rest({ host = "github.com", owner = "alice" }, "GET", "users/alice", nil, capture(2))
-    assert.same({ target = "github.com", reason = "GitHub request failed (exit 1)", status = 403 }, failures[1])
-    assert.same({ target = "github.com/alice", reason = "GitHub request failed (exit 1)", status = 403 }, failures[2])
+    assert.same(
+      { target = "github.com", reason = "GitHub request failed (exit 1): HTTP 403: forbidden", status = 403 },
+      failures[1]
+    )
+    assert.same(
+      { target = "github.com/alice", reason = "GitHub request failed (exit 1): HTTP 403: forbidden", status = 403 },
+      failures[2]
+    )
   end)
 
   it("returns all GraphQL error messages for the caller to classify", function()

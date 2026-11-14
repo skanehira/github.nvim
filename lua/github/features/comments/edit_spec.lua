@@ -80,7 +80,7 @@ describe("comment editing", function()
     assert.equals(1, #calls)
     vim.cmd("edit!")
     pending[2]({ code = 1, stdout = "", stderr = "failure" })
-    assert.equals("GitHub a/r #7 comment 12: GitHub request failed (exit 1)", notices[#notices])
+    assert.equals("GitHub a/r #7 comment 12: GitHub request failed (exit 1): failure", notices[#notices])
     vim.cmd("write")
     assert.equals(2, #calls)
     assert.equals("GitHub a/r #7 comment 12: comment not loaded", notices[#notices])
@@ -101,12 +101,18 @@ describe("comment editing", function()
     assert.equals(2, #calls)
     assert.equals("GitHub a/r #7 comment 12: save already in progress", notices[#notices])
     pending[2]({ code = 1, stdout = "", stderr = "HTTP 403: forbidden" })
-    assert.equals("GitHub a/r #7 comment 12: rejected: GitHub request failed (exit 1)", notices[#notices])
+    assert.equals(
+      "GitHub a/r #7 comment 12: rejected: GitHub request failed (exit 1): HTTP 403: forbidden",
+      notices[#notices]
+    )
     assert.same({ "draft", "later" }, lines())
     assert.is_true(vim.bo.modified)
     vim.cmd("write")
     pending[3]({ code = 1, stdout = "", stderr = "connection reset" })
-    assert.equals("GitHub a/r #7 comment 12: result unknown: GitHub request failed (exit 1)", notices[#notices])
+    assert.equals(
+      "GitHub a/r #7 comment 12: result unknown: GitHub request failed (exit 1): connection reset",
+      notices[#notices]
+    )
     assert.same({ "draft", "later" }, lines())
     assert.is_true(vim.bo.modified)
     assert.equals(3, #calls)

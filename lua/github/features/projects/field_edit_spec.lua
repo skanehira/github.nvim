@@ -821,9 +821,12 @@ describe("projects field edit", function()
     assert.same({ "changed" }, lines_of(input_win))
     assert.same({
       { "Notes (Text)", "FloatTitle" },
-      { "  Error: GitHub request failed (exit 1)", "GitHubProjectsError" },
+      { "  Error: GitHub request failed (exit 1): HTTP 403", "GitHubProjectsError" },
     }, vim.api.nvim_win_get_config(input_win).title)
-    assert.equals("Error: GitHub request failed (exit 1)", editor_header(current_window("gh-projects-editor")))
+    assert.equals(
+      "Error: GitHub request failed (exit 1): HTTP 403",
+      editor_header(current_window("gh-projects-editor"))
+    )
     assert.equals("note", board.selected_item(board_buf).values.notes.value)
     assert.equals(4, #calls)
 

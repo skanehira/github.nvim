@@ -779,7 +779,7 @@ describe("projects item manage", function()
     key("<C-s>")
     fail(3, 1, "HTTP 403")
     assert.same(
-      { "GitHub projects: permission denied: GitHub request failed (exit 1)", vim.log.levels.ERROR },
+      { "GitHub projects: permission denied: GitHub request failed (exit 1): HTTP 403", vim.log.levels.ERROR },
       notices[1]
     )
     assert.equals(body_win, vim.api.nvim_get_current_win())
@@ -1247,7 +1247,7 @@ describe("projects item manage", function()
     key("y")
     fail(3, 1, "HTTP 403")
     assert.same(
-      { "GitHub projects: permission denied: GitHub request failed (exit 1)", vim.log.levels.ERROR },
+      { "GitHub projects: permission denied: GitHub request failed (exit 1): HTTP 403", vim.log.levels.ERROR },
       notices[1]
     )
     assert.equals(4, #board.state(board_buf).items)
@@ -1488,7 +1488,7 @@ describe("projects item manage", function()
     key("<CR>")
     fail(3, 1, "HTTP 429")
     assert.same({
-      "GitHub projects: rate limit exceeded: GitHub request failed (exit 1)",
+      "GitHub projects: rate limit exceeded: GitHub request failed (exit 1): HTTP 429",
       vim.log.levels.ERROR,
     }, notices[1])
     assert.is_not_nil(input_window())
@@ -1497,7 +1497,7 @@ describe("projects item manage", function()
     assert.equals(4, #pending)
     fail(4, 1, "HTTP 422")
     assert.same({
-      "GitHub projects: invalid request: GitHub request failed (exit 1)",
+      "GitHub projects: invalid request: GitHub request failed (exit 1): HTTP 422",
       vim.log.levels.ERROR,
     }, notices[2])
     assert.is_not_nil(input_window())

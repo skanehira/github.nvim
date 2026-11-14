@@ -83,7 +83,7 @@ describe("plugin setup and readiness", function()
     {
       name = "other access failure",
       result = { code = 1, stdout = "", stderr = "HTTP 403: forbidden" },
-      expected = "GitHub owner/repo: GitHub request failed (exit 1)",
+      expected = "GitHub owner/repo: GitHub request failed (exit 1): HTTP 403: forbidden",
     },
   }) do
     it("reports " .. scenario.name .. " while leaving editing usable", function()

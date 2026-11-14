@@ -11,6 +11,26 @@ local function target_name(target)
   return table.concat(parts, "/")
 end
 
+-- gh writes the useful part of an API failure to stderr, for example
+-- "gh: Not Found (HTTP 404)" or "gh: Field 'x' doesn't exist on type 'Y'".
+-- Show the first non-empty line so the reason is actionable without flooding
+-- the header with a long trace or gh's remediation hints.
+local function stderr_detail(stderr)
+  if type(stderr) ~= "string" then
+    return nil
+  end
+  for line in stderr:gmatch("[^\r\n]+") do
+    line = vim.trim(line):gsub("^gh:%s*", "")
+    if line ~= "" then
+      if vim.fn.strchars(line) > 200 then
+        line = vim.fn.strcharpart(line, 0, 200) .. "..."
+      end
+      return line
+    end
+  end
+  return nil
+end
+
 function M.new(run)
   run = run or require("github.core.process").run
   local function call(target, argv, stdin, graphql, callback)
@@ -42,7 +62,12 @@ function M.new(run)
           return fail("gh is not authenticated; run gh auth login --hostname " .. target.host, "rejected", status)
         end
         local kind = status and status >= 400 and status < 500 and "rejected" or "unknown"
-        return fail("GitHub request failed (exit " .. tostring(result.code) .. ")", kind, status)
+        local message = "GitHub request failed (exit " .. tostring(result.code) .. ")"
+        local detail = stderr_detail(stderr)
+        if detail then
+          message = message .. ": " .. detail
+        end
+        return fail(message, kind, status)
       end
       local ok, decoded = pcall(vim.json.decode, result.stdout)
       if not ok or type(decoded) ~= "table" then

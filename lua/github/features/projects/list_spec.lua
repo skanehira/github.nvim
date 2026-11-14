@@ -447,7 +447,7 @@ describe("projects list", function()
     key("r")
     fail(3, 1, "HTTP 403")
     assert.same({
-      "Error: GitHub request failed (exit 1)",
+      "Error: GitHub request failed (exit 1): HTTP 403",
       "#1 One  0 items  public",
     }, list_lines(win))
 
@@ -493,7 +493,7 @@ describe("projects list", function()
     fail(2, 1, "HTTP 404")
     assert.equals(0, #float_windows())
     assert.equals(buf, vim.api.nvim_get_current_buf())
-    assert.same({ "GitHub projects: GitHub request failed (exit 1)", vim.log.levels.ERROR }, notices[2])
+    assert.same({ "GitHub projects: GitHub request failed (exit 1): HTTP 404", vim.log.levels.ERROR }, notices[2])
 
     vim.cmd("GitHub projects secret")
     fail(3, 1, "HTTP 403")
