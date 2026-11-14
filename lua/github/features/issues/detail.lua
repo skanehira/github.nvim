@@ -17,6 +17,10 @@ local function sanitize(value)
   return (value:gsub("%c", " "))
 end
 
+function M.title_text(title)
+  return sanitize(title)
+end
+
 local function display_width(text)
   return vim.fn.strdisplaywidth(text)
 end
@@ -33,25 +37,6 @@ local function append(target, chunks)
   for _, chunk in ipairs(chunks) do
     target[#target + 1] = chunk
   end
-end
-
-local function wrap(text, width)
-  local lines, current = {}, ""
-  for _, char in ipairs(vim.fn.split(text, "\\zs")) do
-    if display_width(current .. char) > width and current ~= "" then
-      lines[#lines + 1] = current
-      current = char
-    else
-      current = current .. char
-    end
-  end
-  if current ~= "" then
-    lines[#lines + 1] = current
-  end
-  if #lines == 0 then
-    lines[1] = ""
-  end
-  return lines
 end
 
 local function truncate(text, width)
@@ -136,16 +121,6 @@ local function label_cap_group(color)
     vim.api.nvim_set_hl(0, name, { fg = "#" .. hex, default = true })
   end
   return name
-end
-
-local function title_lines(issue, width)
-  local text = sanitize(type(issue.title) == "string" and issue.title or "")
-  local lines = wrap(text, width)
-  local result = {}
-  for _, line in ipairs(lines) do
-    result[#result + 1] = { { line, "gh_issue_title" } }
-  end
-  return result
 end
 
 local function state_lines(issue, target, width)
@@ -343,7 +318,6 @@ end
 local function build(issue, target, width)
   width = math.max(width, 20)
   local lines = {}
-  append(lines, title_lines(issue, width))
   lines[#lines + 1] = {}
   append(lines, state_lines(issue, target, width))
   lines[#lines + 1] = {}
@@ -377,9 +351,13 @@ local function apply(buf, issue, target)
   if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then
     return
   end
-  local lines = build(issue, target, buffer_width(buf))
+  local width = buffer_width(buf)
+  local lines = build(issue, target, width)
   vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
-  vim.api.nvim_buf_set_extmark(buf, namespace, 0, 0, {
+  if vim.api.nvim_buf_line_count(buf) < 2 then
+    vim.api.nvim_buf_set_lines(buf, 1, 1, false, { "" })
+  end
+  vim.api.nvim_buf_set_extmark(buf, namespace, 1, 0, {
     virt_lines = lines,
     virt_lines_above = true,
     priority = 100,
@@ -403,6 +381,14 @@ local function ensure_resized()
   })
 end
 
+local function update_modifiable(buf)
+  local win = vim.fn.bufwinid(buf)
+  if win == -1 then
+    return
+  end
+  vim.bo[buf].modifiable = vim.api.nvim_win_get_cursor(win)[1] > 1
+end
+
 local function attach(buf)
   if attached[buf] then
     return
@@ -420,6 +406,14 @@ local function attach(buf)
       if state then
         apply(buf, state.issue, state.target)
       end
+      update_modifiable(buf)
+    end,
+  })
+  vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "CursorMoved" }, {
+    group = group,
+    buffer = buf,
+    callback = function()
+      update_modifiable(buf)
     end,
   })
   vim.api.nvim_create_autocmd("BufWipeout", {
@@ -444,6 +438,10 @@ function M.render(buf, issue, target)
     vim.wo[win].wrap = true
   end
   apply(buf, issue, target)
+  local win = vim.fn.bufwinid(buf)
+  if win ~= -1 and vim.api.nvim_win_get_cursor(win)[1] == 1 then
+    vim.api.nvim_win_set_cursor(win, { 2, 0 })
+  end
 end
 
 return M

@@ -7,7 +7,6 @@ local function define()
     gh_green = { fg = "#b4be82", ctermfg = 150 },
     gh_orange = { fg = "#e2a478", ctermfg = 216 },
     gh_red = { fg = "#ff5f5f", ctermfg = 203, bold = true },
-    gh_issue_title = { fg = "#e6edf3", bold = true },
     gh_issue_meta = { fg = "#8b949e" },
     GitHubIssueLabel = { fg = "#e6edf3", bg = "#30363d" },
     GitHubIssueLabelCap = { fg = "#30363d" },

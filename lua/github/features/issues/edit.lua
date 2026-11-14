@@ -2,6 +2,7 @@ local M = {}
 local gh = require("github.core.gh")
 local request = require("github.core.request")
 local buffers = require("github.core.buffer")
+local detail = require("github.features.issues.detail")
 local states = {}
 local title_query = [[query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) { issue(number: $number) { id title } }
@@ -90,16 +91,16 @@ local function read(buf, target, field)
         end
         state.id, state.loaded = issue.id, true
         vim.bo[buf].modifiable = true
-        vim.api.nvim_buf_set_lines(
-          buf,
-          0,
-          -1,
-          false,
-          vim.split((issue[field]:gsub("\r\n", "\n")), "\n", { plain = true })
-        )
+        local body = vim.split((issue[field]:gsub("\r\n", "\n")), "\n", { plain = true })
+        local lines = body
+        if field == "body" then
+          state.title = detail.title_text(issue.title)
+          lines = vim.list_extend({ state.title }, body)
+        end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
         vim.bo[buf].modified = false
         if field == "body" then
-          require("github.features.issues.detail").render(buf, issue, target)
+          detail.render(buf, issue, target)
           require("github.core.navigation").event(buf, "gh_open_issue")
         end
       end)
@@ -138,11 +139,26 @@ function M.write(buf)
   if not vim.bo[buf].modified then
     return
   end
+  if state.field == "body" then
+    local first = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+    if first ~= state.title then
+      return notify(state, "the issue header is read-only; restore the title line before saving", vim.log.levels.ERROR)
+    end
+  end
   local snapshot, err = buffers.begin_save(buf)
   if not snapshot then
     return notify(state, err, vim.log.levels.WARN)
   end
-  local text = table.concat(snapshot.lines, "\n")
+  local text
+  if state.field == "body" then
+    local body = {}
+    for i = 2, #snapshot.lines do
+      body[#body + 1] = snapshot.lines[i]
+    end
+    text = table.concat(body, "\n")
+  else
+    text = table.concat(snapshot.lines, "\n")
+  end
   if state.field == "title" and (#snapshot.lines ~= 1 or not text:find("%S")) then
     buffers.finish_save(snapshot, false)
     return notify(state, "title must be one nonblank line", vim.log.levels.ERROR)
