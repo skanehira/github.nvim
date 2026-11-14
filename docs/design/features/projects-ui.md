@@ -60,7 +60,7 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 | `GitHubProjectsNumber` | fg `#8b949e` | 項目番号・種別 |
 | `GitHubProjectsMeta` | fg `#8b949e` | 件数・ラベル以外の補助情報 |
 | `GitHubProjectsProgress` | fg `#3fb950` | サブIssue進捗の完了部分 |
-| `GitHubProjectsProgressEmpty` | fg `#30363d` | サブIssue進捗の未完了部分 |
+| `GitHubProjectsProgressEmpty` | fg `#30363d`, bg `#30363d` | サブIssue進捗の未完了部分（塗りつぶしのトラック） |
 | `GitHubProjectsLabel` | fg `#e6edf3`, bg `#30363d` | 色情報のないラベルチップ |
 | `GitHubProjectsLabelMore` | fg `#e6edf3`, bg `#30363d` | ラベルの`+N` |
 | `GitHubProjectsEmpty` | fg `#8b949e` | 空の列・0件の案内 |
@@ -101,7 +101,7 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 - タイトルの後に空行1行を置き、表示できるメタ情報がある場合だけ次の行を追加する。
   - ラベルは最大2件を色付きチップ（` <name> `）で表示し、残りは`+N`とする。チップの背景はラベルの色、文字色は輝度に応じて黒/白とする。色情報がないラベルは`GitHubProjectsLabel`を使う。
   - 担当者は先頭のログイン名を先頭行の右端に右寄せで表示し、2名以上なら`+N`を付ける。プロフィール画像はターミナルに描けないためログイン名で代用する。
-  - サブIssueの進捗は`total > 0`のときだけ`<completed>/<total> <bar>`を表示する。バーは完了部分を`GitHubProjectsProgress`、未完了部分を`GitHubProjectsProgressEmpty`で描き、カードの右端まで埋める。
+  - サブIssueの進捗は`total > 0`のときだけ`<completed>/<total> <bar>`を表示する。完了部分は`GitHubProjectsProgress`の緑のブロック、未完了部分は`GitHubProjectsProgressEmpty`の塗りつぶしトラック（`#30363d`）で描き、カードの右端まで埋める。
   - 関連PRは最大2件を`⇄ #<n>`で表示し、残りは`+N`とする。
 - 選択中のカードは背景を`GitHubProjectsCardSelected`、枠線を`GitHubProjectsCardSelectedBorder`（太い黄色の二重線）にし、カーソルをタイトル行に置く。空の列を選んだ場合は列ヘッダにカーソルを置く。
 - カード間は空行1行で区切る。空の列は列ヘッダと`—`を表示する。項目が0件のボードは列ヘッダと`No items`を表示する。フィルタが適用されている場合は、項目が0件でも`No items match filter`を優先する。

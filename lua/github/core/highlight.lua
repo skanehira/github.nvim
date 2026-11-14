@@ -21,7 +21,7 @@ local function define()
     GitHubProjectsNumber = { fg = "#8b949e" },
     GitHubProjectsMeta = { fg = "#8b949e" },
     GitHubProjectsProgress = { fg = "#3fb950" },
-    GitHubProjectsProgressEmpty = { fg = "#30363d" },
+    GitHubProjectsProgressEmpty = { fg = "#30363d", bg = "#30363d" },
     GitHubProjectsLabel = { fg = "#e6edf3", bg = "#30363d" },
     GitHubProjectsLabelMore = { fg = "#e6edf3", bg = "#30363d" },
     GitHubProjectsEmpty = { fg = "#8b949e" },
