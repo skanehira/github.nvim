@@ -40,14 +40,16 @@ Projects v2のowner解決、Project一覧、Projectのフィールド・ビュ�
 ### 項目
 
 - `items(first:100, after:, query:filter, orderBy:{field:POSITION, direction:ASC}, archivedStates:[NOT_ARCHIVED])`を取得する。
-- `pageInfo.hasNextPage`と`endCursor`を辿り、`max_items`（既定1000）に達するまで取得する。達した場合は`truncated=true`とし、`totalCount`は打ち切り前の総数を保持する。
+- `items_page`は1回の呼び出しで1ページだけ取得し、`{items, total_count, has_next, end_cursor}`を返す。`has_next`が真なのに`endCursor`がない応答は不正として扱う。
+- `items`は`items_page`を`pageInfo.hasNextPage`と`endCursor`で辿り、`max_items`（既定1000）に達するまで取得する。達した場合は`truncated=true`とし、`totalCount`は打ち切り前の総数を保持する。ボードは`items_page`を直接使い、最初のページだけを待って描画し、残りはスクロール時に取得する。
 - 各項目は`id`、`type`、`isArchived`、`content`、`fieldValues`を保持する。`isArchived`が真の項目は描画しない。
 - `content`は次のunionを扱う。
-  - Issue: `number`、`title`、`state`、`url`、`repository.nameWithOwner`、`labels(first:5){totalCount, nodes}`、`assignees(first:3){totalCount, nodes}`、`subIssuesSummary{total, completed}`、`closedByPullRequestsReferences(first:3){totalCount, nodes}`。
-  - PullRequest: `number`、`title`、`state`、`url`、`repository.nameWithOwner`、`labels(first:5){totalCount, nodes}`、`assignees(first:3){totalCount, nodes}`。
+  - Issue: `number`、`title`、`state`、`url`、`repository.nameWithOwner`、`labels(first:2){totalCount, nodes}`、`assignees(first:1){totalCount, nodes}`、`subIssuesSummary{total, completed}`、`closedByPullRequestsReferences(first:2){totalCount, nodes}`。
+  - PullRequest: `number`、`title`、`state`、`url`、`repository.nameWithOwner`、`labels(first:2){totalCount, nodes}`、`assignees(first:1){totalCount, nodes}`。
   - DraftIssue: `title`、`body`。
   - REDACTED: 内容なし。`type="REDACTED"`として返し、描画側がredactedと表示する。
-- `fieldValues(first:50)`から単一選択・テキスト・数値・日付の値と`field{id, name, dataType}`を取得する。組み込みフィールドの値は無視する。単一選択は`optionId`と`name`を保持する。
+- カードはラベル2件・担当者1件・関連PR2件だけを表示するため、取得件数も表示件数に合わせる。`totalCount`は全件数を返すので`+N`の表示に使える。
+- `fieldValues(first:50)`から単一選択・テキスト・数値・日付の値と`field{id, dataType}`を取得する。組み込みフィールドの値は無視する。単一選択は`optionId`と`name`を保持する。フィールド名は詳細の`fields`から引くため、項目側では取得しない。
 - 内部モデルは`{id, type, content, values, archived}`。`values`はフィールドIDをキーとし、`{kind, value, option_id?, name?}`を保持する。列の値は`group_field`のIDで引く。`content`はラベル・担当者・関連PRの`totalCount`も保持し、表示上限を超えた分の件数をUIが示せるようにする。
 - 項目の総数と打ち切りは画面のヘッダに表示する。0件は成功結果として扱い、エラーにしない。
 
@@ -140,26 +142,26 @@ query($owner: String!, $number: Int!, $after: String, $filter: String) {
             ... on Issue {
               number title state url
               repository { nameWithOwner }
-              labels(first: 5) { totalCount nodes { name color } }
-              assignees(first: 3) { totalCount nodes { login } }
+              labels(first: 2) { totalCount nodes { name color } }
+              assignees(first: 1) { totalCount nodes { login } }
               subIssuesSummary { total completed }
-              closedByPullRequestsReferences(first: 3) { totalCount nodes { number url } }
+              closedByPullRequestsReferences(first: 2) { totalCount nodes { number url } }
             }
             ... on PullRequest {
               number title state url
               repository { nameWithOwner }
-              labels(first: 5) { totalCount nodes { name color } }
-              assignees(first: 3) { totalCount nodes { login } }
+              labels(first: 2) { totalCount nodes { name color } }
+              assignees(first: 1) { totalCount nodes { login } }
             }
             ... on DraftIssue { title body }
           }
           fieldValues(first: 50) {
             nodes {
               __typename
-              ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { id name dataType } } }
-              ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { id name dataType } } }
-              ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { id name dataType } } }
-              ... on ProjectV2ItemFieldSingleSelectValue { name optionId field { ... on ProjectV2FieldCommon { id name dataType } } }
+              ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { id dataType } } }
+              ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { id dataType } } }
+              ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { id dataType } } }
+              ... on ProjectV2ItemFieldSingleSelectValue { name optionId field { ... on ProjectV2FieldCommon { id dataType } } }
             }
           }
         }
@@ -270,6 +272,7 @@ API層は画面を持たない。画面は返されたモデルを描画し、mu
 | Projectのフィールド・ビュー・先頭ビューのフィルタ・`group_by`の解決とフォールバックを行う。 | 単体 |
 | 編集可能フィールドを`dataType`で絞り、組み込みフィールドを除外する。 | 単体 |
 | 項目を100件/pageでページングし、`max_items`で打ち切り、`totalCount`と`truncated`を保持する。 | 単体 |
+| 1ページだけを取得して`has_next`と`end_cursor`を返し、カーソルのない続きの応答を不正として拒否する。 | 単体 |
 | `query`フィルタと`archivedStates`を要求に含め、0件を成功として返す。 | 単体 |
 | Issue/PR/DraftIssue/REDACTEDのcontentとフィールド値を内部モデルへ変換する。 | 単体 |
 | 単一選択・テキスト・数値・日付の更新と解除を正しい`ProjectV2FieldValue`で送る。 | 単体 |

@@ -322,6 +322,10 @@ describe("projects board", function()
     assert.equals("No items", loading[3])
 
     respond(2, items_response(default_items()))
+    -- The detail and the first items page were requested in parallel, so the
+    -- page is reused instead of requesting it again after the detail arrives.
+    assert.equals(2, #pending)
+    assert.same({ owner = "alice", number = 1, filter = "" }, vim.json.decode(calls[2].opts.stdin).variables)
     local rendered = list_lines(win)
     assert.equals("alice / Board  ·  4 items  ·  filter: ", rendered[1])
     assert.is_not_nil(rendered[2]:find("● Todo 2", 1, true))
@@ -366,6 +370,7 @@ describe("projects board", function()
       "group_field",
       "items",
       "offsets",
+      "pagination",
       "project",
       "selected",
       "visible",
@@ -533,7 +538,10 @@ describe("projects board", function()
   it("applies a filter from ghs and keeps the previous content on failure", function()
     open_board(1)
     respond(1, detail_response(1, "Board", "label:bug", true))
+    -- The parallel first page uses no filter, so it is discarded and the
+    -- filtered request runs after the detail arrives.
     respond(2, items_response(default_items()))
+    respond(3, items_response(default_items()))
     local win, buf = current_window("gh-projects-board")
     assert.equals("alice / Board  ·  4 items  ·  view: Board  ·  filter: label:bug", list_lines(win)[1])
 
@@ -546,9 +554,9 @@ describe("projects board", function()
     key("<CR>")
     assert.is_nil(current_window("gh-projects-input"))
     assert.equals("Loading 4/4...", list_lines(win)[1])
-    assert.equals("assignee:alice", vim.json.decode(calls[3].opts.stdin).variables.filter)
+    assert.equals("assignee:alice", vim.json.decode(calls[4].opts.stdin).variables.filter)
 
-    respond(3, items_response({ default_items()[1] }))
+    respond(4, items_response({ default_items()[1] }))
     assert.equals("alice / Board  ·  1 items  ·  filter: assignee:alice", list_lines(win)[1])
     assert.is_nil(board.state(buf).view)
     assert.equals("assignee:alice", board.state(buf).filter)
@@ -558,7 +566,7 @@ describe("projects board", function()
     vim.api.nvim_buf_set_lines(bad_input_buf, 0, -1, false, { "bad" })
     key("<Esc>")
     key("<CR>")
-    fail(4, 1, "HTTP 403")
+    fail(5, 1, "HTTP 403")
     assert.equals("Error: GitHub request failed (exit 1)", list_lines(win)[1])
     assert.equals("assignee:alice", board.state(buf).filter)
     assert.equals(1, #board.state(buf).items)
@@ -568,7 +576,7 @@ describe("projects board", function()
     vim.api.nvim_buf_set_lines(none_input_buf, 0, -1, false, { "none" })
     key("<Esc>")
     key("<CR>")
-    respond(5, items_response({}))
+    respond(6, items_response({}))
     assert.equals("alice / Board  ·  0 items  ·  filter: none", list_lines(win)[1])
     assert.equals("No items match filter", list_lines(win)[3])
     assert.is_nil(board.state(buf).selected.item_id)
@@ -580,14 +588,14 @@ describe("projects board", function()
     assert.is_nil(current_window("gh-projects-input"))
     assert.equals("alice / Board  ·  0 items  ·  filter: none", list_lines(win)[1])
     assert.equals("none", board.state(buf).filter)
-    assert.equals(5, #pending)
+    assert.equals(6, #pending)
 
     key("ghs")
     local _, empty_input_buf = current_window("gh-projects-input")
     vim.api.nvim_buf_set_lines(empty_input_buf, 0, -1, false, { "" })
     key("<CR>")
     assert.equals("Loading 0/4...", list_lines(win)[1])
-    respond(6, items_response(default_items()))
+    respond(7, items_response(default_items()))
     assert.equals("alice / Board  ·  4 items  ·  filter: ", list_lines(win)[1])
     assert.equals("", board.state(buf).filter)
   end)
@@ -983,6 +991,101 @@ describe("projects board", function()
     assert.equals("Showing 2 of 3", board.state(buf).truncated)
   end)
 
+  it("renders the first page and loads more pages when scrolling to the end", function()
+    local first = {
+      item_node({
+        id = "I1",
+        type = "ISSUE",
+        option = "todo",
+        option_name = "Todo",
+        content = issue_content(1, "Todo 1", empty_connection(), empty_connection()),
+      }),
+      item_node({
+        id = "I2",
+        type = "ISSUE",
+        option = "todo",
+        option_name = "Todo",
+        content = issue_content(2, "Todo 2", empty_connection(), empty_connection()),
+      }),
+    }
+    local other_column = {
+      item_node({
+        id = "I3",
+        type = "ISSUE",
+        option = "done",
+        option_name = "Done",
+        content = issue_content(3, "Done 1", empty_connection(), empty_connection()),
+      }),
+    }
+    local last = {
+      item_node({
+        id = "I4",
+        type = "ISSUE",
+        option = "todo",
+        option_name = "Todo",
+        content = issue_content(4, "Todo 3", empty_connection(), empty_connection()),
+      }),
+    }
+    open_board(1)
+    respond(1, detail_response(1, "Board", nil, false, 4))
+    respond(2, items_response(first, 4, true, "c1"))
+    local win, buf = current_window("gh-projects-board")
+    assert.equals("alice / Board  ·  2/4 items  ·  filter: ", list_lines(win)[1])
+    assert.same({ after = "c1", has_next = true, done = false, total = 4 }, board.state(buf).pagination)
+
+    key("j")
+    assert.equals("Loading 2/4...", list_lines(win)[1])
+    assert.equals(3, #pending)
+    assert.same(
+      { owner = "alice", number = 1, after = "c1", filter = "" },
+      vim.json.decode(calls[3].opts.stdin).variables
+    )
+
+    -- This page adds an item to another column only, so the board keeps fetching
+    -- until the selected column grows.
+    respond(3, items_response(other_column, 4, true, "c2"))
+    assert.equals("Loading 3/4...", list_lines(win)[1])
+    assert.equals(4, #pending)
+    assert.equals("c2", vim.json.decode(calls[4].opts.stdin).variables.after)
+
+    respond(4, items_response(last, 4, false))
+    assert.equals("alice / Board  ·  4 items  ·  filter: ", list_lines(win)[1])
+    assert.same({ column_index = 1, item_id = "I2" }, board.state(buf).selected)
+    assert.same({ 3, 0, 1, 0 }, {
+      board.state(buf).columns[1].count,
+      board.state(buf).columns[2].count,
+      board.state(buf).columns[3].count,
+      board.state(buf).columns[4].count,
+    })
+    assert.is_false(board.state(buf).pagination.has_next)
+    assert.is_true(board.state(buf).pagination.done)
+    assert.is_nil(board.state(buf).loading)
+    assert.is_nil(board.state(buf).error)
+  end)
+
+  it("shows the error and keeps the loaded items when a lazy page fails", function()
+    local first = {
+      item_node({
+        id = "I1",
+        type = "ISSUE",
+        option = "todo",
+        option_name = "Todo",
+        content = issue_content(1, "Todo 1", empty_connection(), empty_connection()),
+      }),
+    }
+    open_board(1)
+    respond(1, detail_response(1, "Board", nil, false, 10))
+    respond(2, items_response(first, 10, true, "c1"))
+    local win, buf = current_window("gh-projects-board")
+
+    key("G")
+    fail(3, 1, "HTTP 500")
+    assert.equals("Error: GitHub request failed (exit 1)", list_lines(win)[1])
+    assert.equals(1, #board.state(buf).items)
+    assert.equals("Todo 1", board.selected_item(buf).content.title)
+    assert.equals("I1", board.state(buf).selected.item_id)
+  end)
+
   it("shows an empty board and an empty filtered board", function()
     open_board(1)
     respond(1, detail_response(1, "Board"))
@@ -1187,22 +1290,22 @@ describe("projects board", function()
     open_board(6)
     local closed = detail_response(6, "Closed")
     closed.data.user.projectV2.closed = true
-    respond(2, closed)
+    respond(3, closed)
     assert.is_nil(current_window("gh-projects-board"))
     assert.same({ "GitHub projects: Project #6 is closed", vim.log.levels.ERROR }, notices[2])
 
     open_board(7)
-    respond(3, detail_response(7, "Late"))
+    respond(5, detail_response(7, "Late"))
     local win = current_window("gh-projects-board")
     assert.is_not_nil(win)
     key("q")
     assert.is_nil(current_window("gh-projects-board"))
-    respond(4, items_response(default_items()))
+    respond(6, items_response(default_items()))
     assert.is_nil(current_window("gh-projects-board"))
     assert.equals(parent, vim.api.nvim_get_current_win())
 
     open_board(8)
-    fail(5, 1, "HTTP 500")
+    fail(7, 1, "HTTP 500")
     assert.is_nil(current_window("gh-projects-board"))
     assert.equals(parent, vim.api.nvim_get_current_win())
     assert.same({ "GitHub projects: GitHub request failed (exit 1)", vim.log.levels.ERROR }, notices[3])
@@ -1215,7 +1318,7 @@ describe("projects board", function()
     local other = vim.api.nvim_get_current_win()
     respond(1, detail_response(1, "Board"))
     assert.equals(0, #float_windows())
-    assert.equals(1, #pending)
+    assert.equals(2, #pending)
     assert.equals(other, vim.api.nvim_get_current_win())
 
     vim.cmd("tabnext 1")
@@ -1233,7 +1336,7 @@ describe("projects board", function()
     vim.api.nvim_win_close(parent, true)
     respond(1, detail_response(1, "Board"))
     assert.equals(0, #float_windows())
-    assert.equals(1, #pending)
+    assert.equals(2, #pending)
     assert.equals(other, vim.api.nvim_get_current_win())
   end)
 end)

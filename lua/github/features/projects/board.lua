@@ -289,7 +289,12 @@ local function render(buf)
 
   local loading = state.loading
     and ("Loading " .. #state.items .. "/" .. tostring(state.project.item_count or #state.items) .. "...")
-  local parts = { target.owner .. " / " .. tostring(state.project.title or ""), #state.items .. " items" }
+  local pagination = state.pagination
+  local items_text = #state.items .. " items"
+  if pagination and pagination.has_next then
+    items_text = #state.items .. "/" .. tostring(pagination.total or state.project.item_count) .. " items"
+  end
+  local parts = { target.owner .. " / " .. tostring(state.project.title or ""), items_text }
   if state.view then
     parts[#parts + 1] = "view: " .. state.view
   end
@@ -401,7 +406,20 @@ local function ensure_resize_autocmd()
   })
 end
 
-local function fetch_items(buf, kind, filter)
+local function max_items()
+  local value = config.projects().max_items
+  if type(value) ~= "number" or value < 1 or value ~= math.floor(value) then
+    return 1000
+  end
+  return value
+end
+
+local function column_size(state, column_index)
+  local column = state.columns[column_index]
+  return column and #column.items or 0
+end
+
+local function fetch_items(buf, kind, filter, prefetched)
   local state = states[buf]
   local target = targets[buf]
   if not state or not target then
@@ -413,42 +431,101 @@ local function fetch_items(buf, kind, filter)
   state.error = nil
   render(buf)
   local api = require("github.features.projects.api").new()
-  api.items(
-    { host = target.host, owner = target.owner, type = target.type },
-    state.project.number,
-    filter,
-    function(result, err)
-      if states[buf] ~= state or state.generation ~= generation or not vim.api.nvim_buf_is_valid(buf) then
-        return
-      end
-      if not result then
-        state.loading = nil
-        state.error = reason(err)
-        render(buf)
-        return
-      end
-      if kind == "filter" then
-        state.filter = filter
-        state.view = nil
-      end
+  local limit = max_items()
+  local replace = kind ~= "more"
+  local first = true
+  local resolved = { host = target.host, owner = target.owner, type = target.type }
+  local request
+
+  local function apply(page, err)
+    if states[buf] ~= state or state.generation ~= generation or not vim.api.nvim_buf_is_valid(buf) then
+      return
+    end
+    if not page then
+      state.loading = nil
+      state.error = reason(err)
+      render(buf)
+      return
+    end
+    if first and kind == "filter" then
+      state.filter = filter
+      state.view = nil
+    end
+    if first then
       state.body_cache = {}
-      local previous = state.selected
-      local previous_column = previous.column_index
-      local previous_index = previous.item_id and item_index(state.columns[previous_column], previous.item_id) or 1
-      state.items = {}
-      for _, item in ipairs(result.items) do
-        if not item.archived then
+      if replace then
+        state.items = {}
+      end
+    end
+    local before = column_size(state, state.selected.column_index)
+    local dropped = false
+    for _, item in ipairs(page.items) do
+      if not item.archived then
+        if #state.items < limit then
           state.items[#state.items + 1] = item
+        else
+          dropped = true
         end
       end
-      state.loading = nil
-      state.error = nil
-      state.truncated = result.truncated and ("Showing " .. config.projects().max_items .. " of " .. result.total_count)
-        or nil
-      rebuild(state, previous.item_id, previous_column, previous_index)
-      render(buf)
     end
-  )
+    first = false
+    local has_next = page.has_next and not dropped and #state.items < limit
+    local truncated = dropped or (page.has_next and #state.items >= limit)
+    state.pagination = {
+      after = page.end_cursor,
+      has_next = has_next,
+      done = not has_next,
+      total = page.total_count,
+    }
+    state.truncated = truncated and ("Showing " .. limit .. " of " .. page.total_count) or nil
+    local previous = state.selected
+    local previous_column = previous.column_index
+    local previous_index = previous.item_id and item_index(state.columns[previous_column], previous.item_id) or 1
+    rebuild(state, previous.item_id, previous_column, previous_index)
+    -- A page can add items to other columns only. Keep fetching while the
+    -- selected column does not grow so pressing j at the bottom makes progress.
+    if kind == "more" and column_size(state, state.selected.column_index) == before and state.pagination.has_next then
+      render(buf)
+      request(page.end_cursor)
+      return
+    end
+    state.loading = nil
+    render(buf)
+  end
+
+  request = function(cursor)
+    api.items_page(resolved, state.project.number, filter, cursor, apply)
+  end
+
+  if prefetched then
+    if prefetched.done then
+      apply(prefetched.result, prefetched.err)
+      return
+    end
+    prefetched.waiters[#prefetched.waiters + 1] = apply
+    return
+  end
+  request(kind == "more" and state.pagination.after or nil)
+end
+
+local function maybe_load_more(buf)
+  local state = states[buf]
+  if not state or state.loading or state.error then
+    return
+  end
+  local pagination = state.pagination
+  if not pagination or not pagination.has_next then
+    return
+  end
+  local column = state.columns[state.selected.column_index]
+  if not column then
+    return
+  end
+  local index = state.selected.item_id and item_index(column, state.selected.item_id)
+  if index and index < #column.items - 1 then
+    return
+  end
+  fetch_items(buf, "more", state.filter)
 end
 
 local function move_column(buf, target)
@@ -488,6 +565,7 @@ local function move_item(buf, delta)
   index = math.max(1, math.min(#column.items, index + delta))
   state.selected.item_id = column.items[index].id
   render(buf)
+  maybe_load_more(buf)
 end
 
 local function select_item_at(buf, index)
@@ -502,6 +580,7 @@ local function select_item_at(buf, index)
   index = math.max(1, math.min(#column.items, index))
   state.selected.item_id = column.items[index].id
   render(buf)
+  maybe_load_more(buf)
 end
 
 local function preview_header(item)
@@ -786,7 +865,22 @@ function M.open(opts)
   open_generations[key] = (open_generations[key] or 0) + 1
   local generation = open_generations[key]
   local api = require("github.features.projects.api").new()
-  api.detail({ host = resolved.host, owner = resolved.owner, type = resolved.type }, number, function(detail, err)
+  local resolved_target = { host = resolved.host, owner = resolved.owner, type = resolved.type }
+
+  -- Fetch the project detail and the first items page in parallel. The page is
+  -- reused only when the first view has no filter; the filter lives in the
+  -- detail response, so a filtered view still needs a second request.
+  local prefetch = { done = false, result = nil, err = nil, waiters = {} }
+  local function deliver(page, err)
+    prefetch.done, prefetch.result, prefetch.err = true, page, err
+    local waiters = prefetch.waiters
+    prefetch.waiters = {}
+    for _, waiter in ipairs(waiters) do
+      waiter(page, err)
+    end
+  end
+
+  api.detail(resolved_target, number, function(detail, err)
     if open_generations[key] ~= generation or not attached(tab, parent) then
       return
     end
@@ -802,7 +896,7 @@ function M.open(opts)
     local win, buf = float.open({ name = name, parent = parent, width = width, height = height })
     vim.wo[win].winhighlight = "FloatBorder:GitHubProjectsCardBorder"
     if states[buf] then
-      targets[buf] = { host = resolved.host, owner = resolved.owner, type = resolved.type }
+      targets[buf] = resolved_target
       fetch_items(buf, "refresh", states[buf].filter)
       return
     end
@@ -822,6 +916,7 @@ function M.open(opts)
       error = nil,
       generation = 0,
       truncated = nil,
+      pagination = { after = nil, has_next = false, done = true, total = detail.project.item_count },
       body_cache = {},
     }
     state.columns = build_columns(state)
@@ -829,9 +924,20 @@ function M.open(opts)
       state.offsets[index] = 1
     end
     states[buf] = state
-    targets[buf] = { host = resolved.host, owner = resolved.owner, type = resolved.type }
+    targets[buf] = resolved_target
     setup_screen(buf, name)
-    fetch_items(buf, "initial", state.filter)
+    if state.filter == "" then
+      fetch_items(buf, "initial", state.filter, prefetch)
+    else
+      fetch_items(buf, "initial", state.filter)
+    end
+  end)
+
+  api.items_page(resolved_target, number, "", nil, function(page, err)
+    if open_generations[key] ~= generation then
+      return
+    end
+    deliver(page, err)
   end)
 end
 

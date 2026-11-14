@@ -327,7 +327,12 @@ end
 local function prepare_board(filter, item_count)
   open_board(1)
   respond(1, detail_response(1, "Board", filter, item_count))
+  -- The board requests the detail and an unfiltered first page in parallel. A
+  -- filtered view discards that page and requests the filtered page afterwards.
   respond(2, items_response(default_items(), item_count))
+  if filter and filter ~= "" then
+    respond(3, items_response(default_items(), item_count))
+  end
   local win, buf = board_window()
   return win, buf
 end
@@ -896,9 +901,9 @@ describe("projects item manage", function()
     local _, input_buf = input_window()
     vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, { "a/r#5" })
     key("<CR>")
-    respond(3, resolve_response("Issue", "NODE5"))
+    respond(4, resolve_response("Issue", "NODE5"))
     respond(
-      4,
+      5,
       added_item_response(item_node({
         id = "I5",
         type = "ISSUE",
@@ -925,9 +930,9 @@ describe("projects item manage", function()
     local _, input_buf = input_window()
     vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, { "a/r#5" })
     key("<CR>")
-    respond(3, resolve_response("Issue", "NODE5"))
+    respond(4, resolve_response("Issue", "NODE5"))
     respond(
-      4,
+      5,
       added_item_response(item_node({
         id = "I5",
         type = "ISSUE",
@@ -996,9 +1001,9 @@ describe("projects item manage", function()
       local _, input_buf = input_window()
       vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, { "a/r#" .. (10 + index) })
       key("<CR>")
-      respond(3, resolve_response("Issue", "NODE" .. index))
+      respond(4, resolve_response("Issue", "NODE" .. index))
       respond(
-        4,
+        5,
         added_item_response(item_node({
           id = "F" .. index,
           type = "ISSUE",
@@ -1030,9 +1035,9 @@ describe("projects item manage", function()
     local _, input_buf = input_window()
     vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, { "a/r#5" })
     key("<CR>")
-    respond(3, resolve_response("Issue", "NODE5"))
+    respond(4, resolve_response("Issue", "NODE5"))
     respond(
-      4,
+      5,
       added_item_response(item_node({
         id = "I5",
         type = "ISSUE",
@@ -1082,9 +1087,9 @@ describe("projects item manage", function()
       local _, input_buf = input_window()
       vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, { "a/r#" .. (20 + index) })
       key("<CR>")
-      respond(3, resolve_response("Issue", "NODE" .. index))
+      respond(4, resolve_response("Issue", "NODE" .. index))
       respond(
-        4,
+        5,
         added_item_response(item_node({
           id = "T" .. index,
           type = "ISSUE",
@@ -1369,7 +1374,7 @@ describe("projects item manage", function()
     key("<CR>")
     key("<C-s>")
     respond(
-      3,
+      4,
       draft_item_response(item_node({
         id = "D6",
         type = "DRAFT_ISSUE",

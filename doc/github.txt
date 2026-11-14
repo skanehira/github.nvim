@@ -425,6 +425,15 @@ PROJECT BOARD
     shows `view: <name>  ·  filter: <filter>`. Loading shows
     `Loading <fetched>/<total>...`; truncation shows
     `Showing <max_items> of <total>`; failure shows `Error: <reason>`.
+    While pages remain, the item count shows `<fetched>/<total> items`.
+
+    The board opens after the Project detail arrives and requests the
+    first 100 items in parallel. Those items appear as soon as the page
+    arrives; the rest are fetched when j, k, g or G reaches the end of the
+    selected column. Loading another page keeps the loaded items and shows
+    `Loading <fetched>/<total>...` in the header. When a page adds items to
+    other columns only, the board keeps fetching until the selected column
+    grows or there are no more pages. Fetching stops at `max_items`.
 
     Columns follow the options of the single-select field chosen by
     `group_by`; items without a value go to the last `○ 値なし` column.
@@ -641,8 +650,9 @@ SETTINGS
     `Status`); when it does not match, the first single-select field is
     used, and without one the board has a single column. `column_width`
     sets the minimum column width (20-80, default 36); columns are
-    widened to fill the board. `max_items` limits fetched
-    items (1-10000, default 1000). New values apply from the next fetch
+    widened to fill the board. `max_items` caps the items the board keeps
+    in memory (1-10000, default 1000); pages are fetched as you scroll
+    until this cap. New values apply from the next fetch
     or redraw; existing float windows are not closed. See |github-limits|
     for the Projects limits.
 
@@ -816,8 +826,10 @@ LIMITS                                                       *github-limits*
   board.
 - Project lists show at most 100 open Projects without page navigation;
   closed Projects are not listed. Fields are limited to the first 50 and
-  views to the first 10. Items are fetched 100 per page up to `max_items`
-  (default 1000), and truncation is displayed. Reload with r to fetch again.
+  views to the first 10. Items are fetched 100 per page: the board loads
+  the first page and fetches the next page when scrolling reaches the end
+  of the selected column, up to `max_items` (default 1000). Truncation is
+  displayed. Reload with r to fetch again from the first page.
 - Project views are not switched or saved; the lowest-numbered view's filter
   is the initial filter. Item reordering, archiving, multi-select and
   iteration editing, creating or editing Projects and fields, and editing a

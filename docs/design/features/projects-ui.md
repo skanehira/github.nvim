@@ -35,7 +35,7 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 - バッファは`buftype=nofile`、`bufhidden=wipe`、`swapfile=false`。読み取り専用画面は`modifiable=false`、入力画面は`modifiable=true`。filetypeは一覧`gh-projects-list`、ボード`gh-projects-board`、フィールド編集`gh-projects-editor`、プレビュー`gh-projects-preview`、ヘルプ`gh-projects-help`、入力`gh-projects-input`とする。
 - 窓は`wrap=false`、`number=false`、`relativenumber=false`、`cursorline=false`、`signcolumn=no`、`foldcolumn=0`、`list=false`、`spell=false`、`scrolloff=0`とする。ボーダーと背景は既定の`FloatBorder`/`NormalFloat`を使う。ボードのfloatはボーダー色だけをissueカードの`GitHubProjectsCardBorder`に合わせるため、`FloatBorder:GitHubProjectsCardBorder`の`winhighlight`を設定する。`NormalFloat`は既定のまま、ボーダー形状は`rounded`。列・カード・ヘッダの背景は画面内のextmarkで表現する。
 - `VimResized`で全画面の幅・高さ・中央配置を再計算する。ボードと一覧は選択と列ごとの表示位置を保って再描画する。子画面は中央へ再配置する。
-- 読み込み中は対象画面のヘッダに進行状況を表示する。ページ取得では`取得済み/総数`を更新する。失敗時は理由をエラー表示し、再取得では直前の成功内容を保持する。
+- 読み込み中は対象画面のヘッダに進行状況を表示する。ページ取得では`取得済み/総数`を更新し、届いたページから順に描画する。失敗時は理由をエラー表示し、再取得では直前の成功内容を保持する。
 - キーマップはバッファローカルに設定し、`silent=true`、`nowait=true`とする。マウス操作は対象外とし、独自のマウス割当をしない。
 - 入力画面は`startinsert`で開始する。`<CR>`で確定、`<C-c>`で中止する。`<Esc>`は挿入モードを抜け、通常モードの`q`で中止する。ヘッドレスでは挿入モードの実操作を検証できないため、テストではマッピングの登録と通常モードのコールバックを確認する。
 - 選択項目の先頭行にカーソルを置き、列ヘッダと項目をextmarkで強調する。`modifiable=false`の画面では`nvim_buf_set_lines`の後に`modifiable`を戻す。
@@ -88,7 +88,7 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 
 ### ボードの描画
 
-- 1行目に`<owner> / <title>  ·  <items> items  ·  filter: <filter>`を表示する。フィルタが先頭ビュー由来なら`view: <name>  ·  filter: <filter>`とする。読み込み中は`Loading <fetched>/<total>...`、打ち切り時は`Showing <max_items> of <total>`、失敗時は`Error: <理由>`を表示する。行全体を`GitHubProjectsToolbar`で描画する。
+- 1行目に`<owner> / <title>  ·  <items> items  ·  filter: <filter>`を表示する。フィルタが先頭ビュー由来なら`view: <name>  ·  filter: <filter>`とする。読み込み中は`Loading <fetched>/<total>...`、打ち切り時は`Showing <max_items> of <total>`、失敗時は`Error: <理由>`を表示する。未取得のページが残っている間は`<items>`を`<fetched>/<total> items`とし、全件取得後は`<fetched> items`とする。行全体を`GitHubProjectsToolbar`で描画する。
 - 2行目に列ヘッダを表示する。`● <name> <count>`とし、選択肢の色を付ける。値なし列は`○ 値なし <count>`とする。右端に`+`を表示する。選択中の列ヘッダは`GitHubProjectsColumnSelected`で強調し、名前・件数・`+`を白で描く。列ヘッダ行全体の背景は`GitHubProjectsColumnHeader`とする。ヘッダの背景はpriority 1、ラベルは2、列背景は0にして、ヘッダが列背景に上書きされないようにする。
 - 列幅は設定`column_width`（既定36、20〜80）を最小幅として、表示領域に合わせて自動調整する。表示列数は`max(1, floor((inner_width + 1) / (column_width + 1)))`と列数の小さい方とし、実効列幅は`max(column_width, floor((inner_width - (表示列数 - 1)) / 表示列数))`とし、割り切れない余りは最後の表示列に加えて合計を`inner_width`にする。これにより右側に余白を残さない。列の区切りは半角スペース1セルとし、`│`は使わない。列数が表示幅を超える場合は横スクロールし、選択列が画面外に出るときは`first_col`を調整する。
 - 各列の本文は`GitHubProjectsColumnBg`の背景で塗り、列ごとに独立した縦の表示位置（先頭項目のindex）を持つ。選択中の列だけを`j`/`k`でスクロールし、他の列の位置は変えない。

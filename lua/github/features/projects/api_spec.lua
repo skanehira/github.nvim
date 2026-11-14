@@ -470,6 +470,10 @@ describe("Projects API", function()
       assert.same({ owner = "alice", number = 7, after = "cursor-1", filter = "assignee:@me" }, calls[2].variables)
       assert.is_truthy(calls[1].query:find("archivedStates: [NOT_ARCHIVED]", 1, true))
       assert.is_truthy(calls[1].query:find("orderBy: {field: POSITION, direction: ASC}", 1, true))
+      assert.is_truthy(calls[1].query:find("labels(first: 2)", 1, true))
+      assert.is_truthy(calls[1].query:find("assignees(first: 1)", 1, true))
+      assert.is_truthy(calls[1].query:find("closedByPullRequestsReferences(first: 2)", 1, true))
+      assert.is_nil(calls[1].query:find("field { ... on ProjectV2FieldCommon { id name dataType } }", 1, true))
       assert.equals(150, #result.items)
       assert.equals(250, result.total_count)
       assert.is_true(result.truncated)
@@ -486,6 +490,51 @@ describe("Projects API", function()
       assert.is_nil(err)
       assert.same({ owner = "alice", number = 7, after = nil, filter = "" }, calls[1].variables)
       assert.same({ items = {}, total_count = 0, truncated = false }, result)
+    end)
+
+    it("fetches a single page and returns the cursor for lazy loading", function()
+      local client, calls = scripted({ items_page({ issue_item("I1", 1, "Issue 1") }, 250, true, "cursor-1") })
+      local api = new_api(client)
+      local result, err
+      api.items_page(
+        { host = "github.com", owner = "alice", type = "User" },
+        7,
+        "assignee:@me",
+        nil,
+        function(value, failure)
+          result, err = value, failure
+        end
+      )
+      assert.is_nil(err)
+      assert.same({ owner = "alice", number = 7, after = nil, filter = "assignee:@me" }, calls[1].variables)
+      assert.equals(1, #result.items)
+      assert.equals("I1", result.items[1].id)
+      assert.equals(250, result.total_count)
+      assert.is_true(result.has_next)
+      assert.equals("cursor-1", result.end_cursor)
+    end)
+
+    it("rejects a page that has more items but no cursor", function()
+      local client = scripted({ items_page({}, 10, true) })
+      local api = new_api(client)
+      local result, err
+      api.items_page({ host = "github.com", owner = "alice", type = "User" }, 7, "", nil, function(value, failure)
+        result, err = value, failure
+      end)
+      assert.is_nil(result)
+      assert.equals("unknown", err.kind)
+    end)
+
+    it("rejects invalid cursors without sending a request", function()
+      local client, calls = scripted({})
+      local api = new_api(client)
+      local result, err
+      api.items_page({ host = "github.com", owner = "alice", type = "User" }, 7, "", 1, function(value, failure)
+        result, err = value, failure
+      end)
+      assert.is_nil(result)
+      assert.equals("validation", err.kind)
+      assert.equals(0, #calls)
     end)
 
     it("converts Issue, PullRequest, DraftIssue and REDACTED content and field values", function()

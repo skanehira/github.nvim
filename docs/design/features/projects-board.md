@@ -12,18 +12,19 @@ UC-015の利用者操作を実現する。対象規則はBR-063〜BR-071。一�
 
 ### ボードの状態
 
-- ボードは`{project, fields, group_field, columns, items, view, filter, selected, offsets, first_col, visible, loading, error, generation, truncated, body_cache}`を保持する。
+- ボードは`{project, fields, group_field, columns, items, view, filter, selected, offsets, first_col, visible, loading, error, generation, truncated, pagination, body_cache}`を保持する。
 - `columns`はグループフィールドの選択肢順に作り、値のない項目を末尾の値なし列に置く。グループフィールドの値が現在の選択肢にない項目も値なし列に置く。各列は`{key, name, color, items, count}`を持つ。値なし列は`{key=nil, no_value=true, name="値なし", items, count}`とする。単一選択フィールドがない場合は1列（`key=nil`）とする。
 - `items`はAPIの項目位置順を保つ。項目は`{id, type, content, values, archived}`で、列の値はグループフィールドIDで引く。
 - `selected`は`{column_index, item_id}`。空の列を選んだ場合は`item_id=nil`とし、列ヘッダを選択状態にする。
 - `offsets`は列ごとの先頭項目のindex（1始まり）。`first_col`は表示する先頭列のindex、`visible`は表示列数。
 - `filter`は初期状態では先頭ビューの`filter`（nullなら空）とし、`view`は先頭ビューの名前を保持する。`ghs`で変更した後は`view=nil`とする。
 - `body_cache`は項目IDごとの本文を保持し、`r`とフィルタ適用で破棄する。
-- `loading`は`nil`、`initial`、`refresh`、`filter`のいずれか。`error`は最後の失敗理由を保持する。`truncated`は`max_items`で打ち切ったことを示す。
+- `loading`は`nil`、`initial`、`refresh`、`filter`、`more`のいずれか。`error`は最後の失敗理由を保持する。`truncated`は`max_items`で打ち切ったことを示す。
+- `pagination`は`{after, has_next, done, total}`。`after`は次ページのカーソル、`has_next`は未取得のページがあるか、`done`は取得を終えたか、`total`はフィルタ適用後の総数。`has_next`が真の間は`j`/`k`/`g`/`G`で末尾に近づくと次ページを取得する。
 
 ### 描画
 
-- 1行目は`<owner> / <title>  ·  <items> items  ·  filter: <filter>`を表示する。フィルタが先頭ビュー由来なら`view: <name>  ·  filter: <filter>`とする。読み込み中は`Loading <fetched>/<total>...`、打ち切り時は`Showing <max_items> of <total>`、失敗時は`Error: <理由>`を表示する。
+- 1行目は`<owner> / <title>  ·  <items> items  ·  filter: <filter>`を表示する。フィルタが先頭ビュー由来なら`view: <name>  ·  filter: <filter>`とする。読み込み中は`Loading <fetched>/<total>...`、打ち切り時は`Showing <max_items> of <total>`、失敗時は`Error: <理由>`を表示する。未取得のページが残っている間は`<items>`を`<fetched>/<total> items`とし、全件取得後は`<fetched> items`とする。
 - Project詳細の取得に失敗した場合はボードを開かず、理由を通知する。項目の取得に失敗した場合は、既に開いているボードのヘッダに`Error: <理由>`を表示し、直前の内容を保持する。
 - 2行目は列ヘッダを表示する。`● <name> <count>`とし、選択肢の色を付ける。右端に`+`を表示する。値なし列は`○ 値なし <count>`とする。選択中の列ヘッダを`GitHubProjectsColumnSelected`で強調する。列ヘッダ行全体の背景は`GitHubProjectsColumnHeader`とする。ヘッダの背景はpriority 1、ラベルは2、列背景は0にして、ヘッダが列背景に上書きされないようにする。
 - 列幅は`column_width`（既定36、20〜80）を最小幅として、表示領域に合わせて自動調整する。表示列数は`max(1, floor((inner_width + 1) / (column_width + 1)))`と列数の小さい方とし、実効列幅は`max(column_width, floor((inner_width - (表示列数 - 1)) / 表示列数))`とし、割り切れない余りは最後の表示列に加えて合計を`inner_width`にする。これにより右側に余白を残さない。列の区切りは半角スペース1セルとし、`│`は使わない。列数が表示幅を超える場合は横スクロールし、選択列が画面外に出るときは`first_col`を調整する。
@@ -38,6 +39,14 @@ UC-015の利用者操作を実現する。対象規則はBR-063〜BR-071。一�
 - 空の列は列ヘッダと`—`を表示する。項目が0件のボードは列ヘッダと`No items`を表示する。フィルタが0件なら`No items match filter`を表示する。
 - 選択中のカードは背景を`GitHubProjectsCardSelected`、枠線を`GitHubProjectsCardSelectedBorder`（太い黄色の二重線）にし、カーソルをタイトル行に置く。空の列を選んだ場合は列ヘッダにカーソルを置く。列ヘッダとカードの強調はextmarkで行い、再描画時に名前空間をクリアする。枠線はpriority 10、カード背景は1、内容は2、列背景は0にして、列背景がカードの背景・内容・枠線を上書きしないようにする。
 - 描画の詳細（列幅、折り返し、ハイライト、extmark）はprojects-uiの規則を使う。
+
+### ページングと遅延読み込み
+
+- ボードを開くときはProject詳細と最初の項目ページ（フィルタなし）を並列に取得する。詳細が届いた時点で画面を開き、先頭ビューのフィルタが空なら並列取得したページをそのまま使い、フィルタがある場合はそのページを破棄してフィルタ付きで取り直す。
+- 初期表示は最初の100件だけを取得し、ページが届くたびに列を組み直して描画する。残りは`pagination.has_next`として保持し、`j`/`k`/`g`/`G`で選択中の列の末尾2件以内に達したときに次ページを取得する。列の移動だけでは取得しない。
+- 取得したページが選択中の列に項目を追加しなかった場合（他の列だけに追加された場合）は、選択中の列が増えるかページが尽きるまで続けて取得する。読み込み中も取得済みの項目と選択を保持し、ヘッダに`Loading <fetched>/<total>...`を表示する。
+- `max_items`（既定1000）に達したら取得を止め、`Showing <max_items> of <total>`を表示する。`truncated`が設定されている間は`has_next=false`とする。
+- ページ取得に失敗した場合は、取得済みの項目と選択を保持し、ヘッダに`Error: <理由>`を表示する。`r`で先頭ページから取り直す。
 
 ### ナビゲーション
 
@@ -79,7 +88,7 @@ UC-015の利用者操作を実現する。対象規則はBR-063〜BR-071。一�
 - `r`は同じProject・フィルタで項目を再取得する。取得開始時に選択を解除しない。
 - 成功時は項目を置き換え、選択を項目IDで維持する。存在しなければ同じ列の同じ位置へclampし、0件なら列ヘッダを選ぶ。`body_cache`を破棄する。
 - 失敗時は直前の成功内容と選択を保持し、理由を表示する。
-- 取得は100件/pageで行い、`max_items`で打ち切る。打ち切り時はヘッダに示す。取得中も画面は操作でき、`q`で閉じられる。
+- 再取得も最初の1ページだけを取得し、残りはスクロール時に取得する。`max_items`で打ち切る。打ち切り時はヘッダに示す。取得中も画面は操作でき、`q`で閉じられる。
 
 ### ヘルプと終了
 
@@ -96,7 +105,7 @@ UC-015の利用者操作を実現する。対象規則はBR-063〜BR-071。一�
 
 ## API
 
-`projects-api`の項目取得と本文取得を使う。項目は`items(first:100, after:, query:, orderBy:{field:POSITION,direction:ASC}, archivedStates:[NOT_ARCHIVED])`で取得し、`pageInfo`を辿る。本文は次のGraphQLで取得する。
+`projects-api`の`items_page`で項目を1ページずつ取得し、`has_next`と`end_cursor`で続きを辿る。`items(first:100, after:, query:, orderBy:{field:POSITION,direction:ASC}, archivedStates:[NOT_ARCHIVED])`の1ページだけを返すため、最初のページを待って描画し、残りはスクロール時に取得できる。本文は次のGraphQLで取得する。
 
 ```graphql
 query($owner: String!, $repo: String!, $number: Int!) {

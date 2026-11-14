@@ -10,6 +10,8 @@ local status_kinds = {
   [429] = "rate_limit",
 }
 
+-- The card shows at most two labels and one assignee, so request only what is
+-- displayed. The "+N" chip uses totalCount, which stays exact.
 local item_fields = [[
 id type isArchived
 content {
@@ -17,28 +19,28 @@ content {
   ... on Issue {
     number title state url
     repository { nameWithOwner }
-    labels(first: 5) { totalCount nodes { name color } }
-    assignees(first: 3) { totalCount nodes { login } }
+    labels(first: 2) { totalCount nodes { name color } }
+    assignees(first: 1) { totalCount nodes { login } }
     subIssuesSummary { total completed }
-    closedByPullRequestsReferences(first: 3) { totalCount nodes { number url } }
+    closedByPullRequestsReferences(first: 2) { totalCount nodes { number url } }
   }
   ... on PullRequest {
     number title state url
     repository { nameWithOwner }
-    labels(first: 5) { totalCount nodes { name color } }
-    assignees(first: 3) { totalCount nodes { login } }
+    labels(first: 2) { totalCount nodes { name color } }
+    assignees(first: 1) { totalCount nodes { login } }
   }
   ... on DraftIssue { title body }
 }
 fieldValues(first: 50) {
   nodes {
     __typename
-    ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { id name dataType } } }
-    ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { id name dataType } } }
-    ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { id name dataType } } }
+    ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { id dataType } } }
+    ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { id dataType } } }
+    ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { id dataType } } }
     ... on ProjectV2ItemFieldSingleSelectValue {
       name optionId
-      field { ... on ProjectV2FieldCommon { id name dataType } }
+      field { ... on ProjectV2FieldCommon { id dataType } }
     }
   }
 }]]
@@ -742,7 +744,9 @@ function M.new(opts)
     )
   end
 
-  local function items(resolved, number, filter, callback)
+  -- Fetch a single page of items so the board can render as soon as the first
+  -- page arrives and request the rest while the user scrolls.
+  local function items_page(resolved, number, filter, after, callback)
     local root = project_root(resolved)
     if not root then
       return callback(nil, invalid("invalid project target"))
@@ -753,13 +757,65 @@ function M.new(opts)
     if filter ~= nil and type(filter) ~= "string" then
       return callback(nil, invalid("invalid project filter"))
     end
+    if after ~= nil and type(after) ~= "string" then
+      return callback(nil, invalid("invalid item cursor"))
+    end
     filter = filter or ""
+    client.graphql(
+      { host = resolved.host, owner = resolved.owner },
+      items_query:format(root, item_fields),
+      { owner = resolved.owner, number = number, after = after, filter = filter },
+      function(data, gh_failure)
+        if not data then
+          return callback(nil, classify(gh_failure))
+        end
+        local body = response_data(data)
+        local project = body and body[root] and body[root].projectV2
+        if missing(project) then
+          return callback(nil, failure("not_found", "project not found"))
+        end
+        if type(project) ~= "table" then
+          return callback(nil, invalid_response("project"))
+        end
+        local connection = project.items
+        if
+          type(connection) ~= "table"
+          or type(connection.nodes) ~= "table"
+          or not vim.islist(connection.nodes)
+          or type(connection.pageInfo) ~= "table"
+          or type(connection.pageInfo.hasNextPage) ~= "boolean"
+          or type(connection.totalCount) ~= "number"
+        then
+          return callback(nil, invalid_response("items"))
+        end
+        local items = {}
+        for _, node in ipairs(connection.nodes) do
+          local item, item_err = parse_item(node)
+          if not item then
+            return callback(nil, failure("unknown", item_err))
+          end
+          items[#items + 1] = item
+        end
+        local has_next = connection.pageInfo.hasNextPage
+        local end_cursor = connection.pageInfo.endCursor
+        if has_next and (type(end_cursor) ~= "string" or end_cursor == "") then
+          return callback(nil, invalid_response("item pagination"))
+        end
+        callback({
+          items = items,
+          total_count = connection.totalCount,
+          has_next = has_next,
+          end_cursor = type(end_cursor) == "string" and end_cursor or nil,
+        })
+      end
+    )
+  end
+
+  local function items(resolved, number, filter, callback)
     local max_items = settings().max_items
     if type(max_items) ~= "number" or max_items < 1 or max_items ~= math.floor(max_items) then
       max_items = 1000
     end
-    local query = items_query:format(root, item_fields)
-    local target = { host = resolved.host, owner = resolved.owner }
     local collected, total_count, seen = {}, nil, {}
     local function finish(truncated)
       if #collected > max_items then
@@ -770,58 +826,25 @@ function M.new(opts)
       callback({ items = collected, total_count = total_count or 0, truncated = truncated })
     end
     local function next_page(cursor)
-      client.graphql(
-        target,
-        query,
-        { owner = resolved.owner, number = number, after = cursor, filter = filter },
-        function(data, gh_failure)
-          if not data then
-            return callback(nil, classify(gh_failure))
-          end
-          local body = response_data(data)
-          local project = body and body[root] and body[root].projectV2
-          if missing(project) then
-            return callback(nil, failure("not_found", "project not found"))
-          end
-          if type(project) ~= "table" then
-            return callback(nil, invalid_response("project"))
-          end
-          local connection = project.items
-          if
-            type(connection) ~= "table"
-            or type(connection.nodes) ~= "table"
-            or not vim.islist(connection.nodes)
-            or type(connection.pageInfo) ~= "table"
-            or type(connection.pageInfo.hasNextPage) ~= "boolean"
-          then
-            return callback(nil, invalid_response("items"))
-          end
-          if total_count == nil then
-            if type(connection.totalCount) ~= "number" then
-              return callback(nil, invalid_response("items"))
-            end
-            total_count = connection.totalCount
-          end
-          for _, node in ipairs(connection.nodes) do
-            local item, item_err = parse_item(node)
-            if not item then
-              return callback(nil, failure("unknown", item_err))
-            end
-            collected[#collected + 1] = item
-          end
-          local more = connection.pageInfo.hasNextPage
-          local over = #collected > max_items
-          if #collected >= max_items or not more then
-            return finish(more or over)
-          end
-          local next_cursor = connection.pageInfo.endCursor
-          if type(next_cursor) ~= "string" or next_cursor == "" or seen[next_cursor] then
-            return callback(nil, invalid_response("item pagination"))
-          end
-          seen[next_cursor] = true
-          next_page(next_cursor)
+      items_page(resolved, number, filter, cursor, function(page, err)
+        if not page then
+          return callback(nil, err)
         end
-      )
+        total_count = total_count or page.total_count
+        for _, item in ipairs(page.items) do
+          collected[#collected + 1] = item
+        end
+        local over = #collected > max_items
+        if #collected >= max_items or not page.has_next then
+          return finish(page.has_next or over)
+        end
+        local next_cursor = page.end_cursor
+        if type(next_cursor) ~= "string" or next_cursor == "" or seen[next_cursor] then
+          return callback(nil, invalid_response("item pagination"))
+        end
+        seen[next_cursor] = true
+        next_page(next_cursor)
+      end)
     end
     next_page(nil)
   end
@@ -1146,6 +1169,7 @@ function M.new(opts)
     list_projects = list_projects,
     detail = detail,
     items = items,
+    items_page = items_page,
     fetch_body = fetch_body,
     update_field = update_field,
     clear_field = clear_field,
