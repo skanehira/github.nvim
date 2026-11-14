@@ -220,10 +220,19 @@ github:issues-search
 ISSUE BODY                                        *github-buffer-issue-edit*
 
 github://{owner}/{repo}/issues/{number}
-    Read the Issue body into a Markdown editing buffer. |:write| updates only
-    the body; an empty body is allowed. A buffer with no changes is not sent.
-    CRLF text is normalized to LF. Unsaved edits are retained on read or save
-    failure, and edits made after a save starts remain unsent and modified.
+    Read the Issue into a Markdown editing buffer. A read-only header above
+    the body shows the title, state (Open or Closed), number, repository,
+    assignees, labels, and Projects v2 project names with the Status field
+    when available. The header follows the window width; the body wraps.
+    Reading project items requires the project scope. Without it, the
+    Projects row shows a dash and the rest of the Issue still opens.
+    |:edit!| reloads the Issue and its header.
+
+    |:write| updates only the body; an empty body is allowed. A buffer with
+    no changes is not sent. CRLF text is normalized to LF. Unsaved edits are
+    retained on read or save failure, and edits made after a save starts
+    remain unsent and modified. The header is virtual text, so it is not
+    written back to GitHub.
 
     ght opens |github-buffer-issue-title|. gha, ghl, and ghm open the same
     Issue's assignees, labels, and comments. Their destination menu offers
@@ -771,6 +780,17 @@ Highlight groups:
     gh_issue_labels          Labels (orange)
     gh_issue_comment_user    Comment author (gh_purple)
     gh_select                Selection marker (ErrorMsg)
+    gh_issue_title           Issue detail title (bold)
+    gh_issue_meta            Issue detail metadata labels (gray)
+    gh_issue_state_open      Issue detail Open badge (green)
+    gh_issue_state_closed    Issue detail Closed badge (gh_purple)
+    gh_issue_project         Issue detail project name (blue)
+    gh_issue_separator       Issue detail separator (Comment)
+    GitHubIssueLabel         Label chip fallback
+    GitHubIssueLabelCap      Label chip cap fallback
+
+Issue detail labels create GitHubIssueLabel_<hex> and GitHubIssueLabelCap_<hex>
+from their colors.
 
 Defaults are restored when a colorscheme changes without overriding explicitly
 configured groups. The color groups gh_blue, gh_green, gh_orange, gh_red, and

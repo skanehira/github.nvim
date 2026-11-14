@@ -3,15 +3,53 @@ local gh = require("github.core.gh")
 local request = require("github.core.request")
 local buffers = require("github.core.buffer")
 local states = {}
-local read_query = [[query($owner: String!, $repo: String!, $number: Int!) {
-  repository(owner: $owner, name: $repo) { issue(number: $number) { id title body } }
+local title_query = [[query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) { issue(number: $number) { id title } }
 }]]
+local body_query = [[query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $number) {
+      id
+      number
+      title
+      state
+      body
+      assignees(first: 100) { nodes { login } }
+      labels(first: 100) { totalCount nodes { name color } }
+      %s
+    }
+  }
+}]]
+local projects_fragment = [[projectItems(first: 10) {
+        nodes {
+          project { title }
+          fieldValues(first: 50) {
+            nodes {
+              ... on ProjectV2ItemFieldSingleSelectValue {
+                name
+                field { ... on ProjectV2FieldCommon { name } }
+              }
+            }
+          }
+        }
+      }]]
 local update_query = [[mutation($input: UpdateIssueInput!) {
   updateIssue(input: $input) { issue { id } }
 }]]
 local function notify(state, message, level)
   local t = state.target
   vim.notify("GitHub " .. t.owner .. "/" .. t.repo .. " #" .. t.issue_number .. ": " .. message, level)
+end
+local function project_scope_error(err)
+  if type(err) ~= "table" or type(err.errors) ~= "table" then
+    return false
+  end
+  for _, message in ipairs(err.errors) do
+    if type(message) == "string" and message:lower():find("project", 1, true) then
+      return true
+    end
+  end
+  return false
 end
 local function read(buf, target, field)
   local state = states[buf]
@@ -38,28 +76,36 @@ local function read(buf, target, field)
   end
   local token = request.begin(buf)
   local variables = { owner = target.owner, repo = target.repo, number = target.issue_number }
-  gh.new().graphql(target, read_query, variables, function(data, err)
-    request.apply(token, function()
-      local result = type(data) == "table" and type(data.data) == "table" and data.data.repository
-      local issue = type(result) == "table" and result.issue
-      if type(issue) ~= "table" or type(issue.id) ~= "string" or type(issue[field]) ~= "string" then
-        return notify(state, err and err.reason or "issue not found or invalid response", vim.log.levels.ERROR)
-      end
-      state.id, state.loaded = issue.id, true
-      vim.bo[buf].modifiable = true
-      vim.api.nvim_buf_set_lines(
-        buf,
-        0,
-        -1,
-        false,
-        vim.split((issue[field]:gsub("\r\n", "\n")), "\n", { plain = true })
-      )
-      vim.bo[buf].modified = false
-      if field == "body" then
-        require("github.core.navigation").event(buf, "gh_open_issue")
-      end
+  local function load(query, fallback)
+    gh.new().graphql(target, query, variables, function(data, err)
+      request.apply(token, function()
+        local result = type(data) == "table" and type(data.data) == "table" and data.data.repository
+        local issue = type(result) == "table" and result.issue
+        if type(issue) ~= "table" or type(issue.id) ~= "string" or type(issue[field]) ~= "string" then
+          if field == "body" and not fallback and project_scope_error(err) then
+            token = request.begin(buf)
+            return load(string.format(body_query, ""), true)
+          end
+          return notify(state, err and err.reason or "issue not found or invalid response", vim.log.levels.ERROR)
+        end
+        state.id, state.loaded = issue.id, true
+        vim.bo[buf].modifiable = true
+        vim.api.nvim_buf_set_lines(
+          buf,
+          0,
+          -1,
+          false,
+          vim.split((issue[field]:gsub("\r\n", "\n")), "\n", { plain = true })
+        )
+        vim.bo[buf].modified = false
+        if field == "body" then
+          require("github.features.issues.detail").render(buf, issue, target)
+          require("github.core.navigation").event(buf, "gh_open_issue")
+        end
+      end)
     end)
-  end)
+  end
+  load(field == "body" and string.format(body_query, projects_fragment) or title_query, false)
 end
 function M.read(buf, target)
   require("github.core.navigation").configure(buf, "markdown")
