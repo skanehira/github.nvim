@@ -139,6 +139,13 @@ describe("projects ui", function()
       assert.equals(49, ui.board_column_width(100, 36, 2))
       assert.equals(30, ui.board_column_width(30, 36, 1))
       assert.equals(1, ui.board_column_width(0, 36, 1))
+
+      assert.same({ 37, 37, 37, 37, 37, 40 }, ui.board_column_widths(230, 36, 6))
+      assert.same({ 114, 115 }, ui.board_column_widths(230, 80, 2))
+      assert.same({ 50 }, ui.board_column_widths(50, 36, 1))
+      assert.same({ 49, 50 }, ui.board_column_widths(100, 36, 2))
+      assert.same({ 30 }, ui.board_column_widths(30, 36, 1))
+      assert.same({ 1 }, ui.board_column_widths(0, 36, 1))
     end)
 
     it("keeps the selected column inside the visible range", function()

@@ -266,9 +266,9 @@ end
 local function layout(state, width)
   local configured = config.projects().column_width
   local visible = math.min(#state.columns, ui.visible_columns(width, configured))
-  local column_width = ui.board_column_width(width, configured, visible)
+  local widths = ui.board_column_widths(width, configured, visible)
   local first_col = ui.first_col(state.first_col, visible, state.selected.column_index, #state.columns)
-  return column_width, visible, first_col
+  return widths, visible, first_col
 end
 
 local function render(buf)
@@ -280,9 +280,10 @@ local function render(buf)
   end
   local win_config = vim.api.nvim_win_get_config(win)
   local width, height = win_config.width, win_config.height
-  local column_width, visible, first_col = layout(state, width)
+  local widths, visible, first_col = layout(state, width)
   state.visible, state.first_col = visible, first_col
-  ensure_visible(state, column_width, height)
+  local selected_width = widths[state.selected.column_index - first_col + 1] or 1
+  ensure_visible(state, selected_width, height)
 
   local loading = state.loading
     and ("Loading " .. #state.items .. "/" .. tostring(state.project.item_count or #state.items) .. "...")
@@ -309,8 +310,9 @@ local function render(buf)
     visible_columns[#visible_columns + 1] = index
   end
   local header_cells, header_cell_spans = {}, {}
-  for _, index in ipairs(visible_columns) do
-    local line, cell_spans = ui.column_header(state.columns[index], column_width, index == state.selected.column_index)
+  for visible_index, index in ipairs(visible_columns) do
+    local line, cell_spans =
+      ui.column_header(state.columns[index], widths[visible_index], index == state.selected.column_index)
     header_cells[#header_cells + 1] = line
     header_cell_spans[#header_cell_spans + 1] = cell_spans
   end
@@ -333,7 +335,7 @@ local function render(buf)
     for visible_index, index in ipairs(visible_columns) do
       local column = state.columns[index]
       local column_lines, column_spans, starts =
-        render_column(column, column_width, index == selected_column, state.selected.item_id)
+        render_column(column, widths[visible_index], index == selected_column, state.selected.item_id)
       columns_data[visible_index] = {
         lines = column_lines,
         spans = column_spans,
@@ -346,7 +348,7 @@ local function render(buf)
       local cells, cell_spans = {}, {}
       for visible_index, data in ipairs(columns_data) do
         local line_index = data.view_start + row_index - 1
-        cells[visible_index] = data.lines[line_index] or blank(column_width)
+        cells[visible_index] = data.lines[line_index] or blank(widths[visible_index])
         cell_spans[visible_index] = data.spans[line_index] or {}
       end
       local line, row_spans, offsets = compose_row(2 + row_index - 1, cells, cell_spans, "GitHubProjectsColumnBg")

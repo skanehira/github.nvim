@@ -364,6 +364,23 @@ function M.board_column_width(inner_width, configured, visible)
   return math.max(1, math.min(inner_width, math.max(configured, width)))
 end
 
+function M.board_column_widths(inner_width, configured, visible)
+  configured = math.max(20, math.min(80, configured or 36))
+  visible = math.max(1, visible or 1)
+  local available = math.max(0, inner_width - (visible - 1))
+  local base = math.floor(available / visible)
+  local width = math.max(1, math.min(inner_width, math.max(configured, base)))
+  local widths = {}
+  for index = 1, visible do
+    widths[index] = width
+  end
+  local remainder = available - width * visible
+  if remainder > 0 then
+    widths[visible] = widths[visible] + remainder
+  end
+  return widths
+end
+
 function M.first_col(first, visible, selected, total)
   if selected < first then
     first = selected
