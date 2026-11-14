@@ -325,7 +325,7 @@ describe("projects list", function()
     assert.equals("acme / Org direct  ·  1 items  ·  filter: ", rendered[1])
     assert.is_not_nil(rendered[2]:find("● Todo 1", 1, true))
     assert.is_not_nil(rendered[2]:find("○ 値なし 0", 1, true))
-    assert.is_not_nil(table.concat(rendered, "\n"):find("◉ #1 Org issue", 1, true))
+    assert.is_not_nil(table.concat(rendered, "\n"):find("◉ r #1", 1, true))
     local has_empty = false
     for _, line in ipairs(rendered) do
       if line:find("—", 1, true) then

@@ -58,27 +58,39 @@ local function label_group(color)
   return name
 end
 
-local AVATAR_COLORS = { "#1f6feb", "#8957e5", "#3fb950", "#d29922", "#db61a2", "#f85149" }
-
-local function avatar_group(login)
-  local hash = 0
-  for index = 1, #login do
-    hash = (hash * 31 + login:byte(index)) % 1000003
+local function repository_label(content)
+  local repository = content.repository
+  if type(repository) ~= "string" then
+    return nil
   end
-  local color = AVATAR_COLORS[(hash % #AVATAR_COLORS) + 1]
-  local name = "GitHubProjectsAvatar_" .. login:gsub("[^%w_]", "_")
-  if vim.fn.hlexists(name) == 0 then
-    vim.api.nvim_set_hl(0, name, { bg = color, fg = "#ffffff", bold = true, default = true })
+  local name = repository:match("([^/]+)$")
+  if not name or name == "" then
+    return nil
   end
   return name
 end
 
-local function avatar_glyph(login)
-  local first = login:sub(1, 1):upper()
-  if first:match("^[A-Z]$") then
-    return vim.fn.nr2char(0x24B6 + first:byte() - 65)
+local function assignee_label(content)
+  local assignees = content.assignees
+  if type(assignees) ~= "table" or type(assignees.nodes) ~= "table" or #assignees.nodes == 0 then
+    return nil
   end
-  return "●"
+  local total = tonumber(assignees.totalCount) or #assignees.nodes
+  local login
+  for _, assignee in ipairs(assignees.nodes) do
+    local value = sanitize(assignee.login)
+    if value ~= "" then
+      login = value
+      break
+    end
+  end
+  if not login then
+    return nil
+  end
+  if total > 1 then
+    return login .. " +" .. (total - 1)
+  end
+  return login
 end
 
 local function item_state_group(item_type, state)
@@ -175,49 +187,55 @@ local function chip_segments(content, inner)
   return text, segments
 end
 
-local function avatar_segments(content, inner)
-  local assignees = content.assignees
-  if type(assignees) ~= "table" or type(assignees.nodes) ~= "table" or #assignees.nodes == 0 then
-    return nil
+local function truncate_header(text, segments, width)
+  if display_width(text) <= width then
+    return text, segments
   end
-  local total = tonumber(assignees.totalCount) or #assignees.nodes
-  local glyphs = {}
-  for index, assignee in ipairs(assignees.nodes) do
-    if index > 3 then
-      break
-    end
-    local login = sanitize(assignee.login)
-    if login ~= "" then
-      glyphs[#glyphs + 1] = { glyph = avatar_glyph(login), group = avatar_group(login) }
+  local truncated = M.truncate(text, width)
+  local limit = #truncated
+  local values = {}
+  for _, segment in ipairs(segments) do
+    local stop = math.min(segment[1] + segment[3], limit)
+    if stop > segment[1] then
+      values[#values + 1] = { segment[1], segment[2], stop - segment[1] }
     end
   end
-  if #glyphs == 0 then
-    return nil
+  return truncated, values
+end
+
+-- GitHub puts "<repo> #<number>" on the first line with the assignee at the
+-- right edge and the title below it. We show the assignee's login instead of
+-- the profile image, which a terminal cannot render.
+local function header_line(content, item_type, inner)
+  local number = tonumber(content.number)
+  local icon = item_type == "ISSUE" and "◉" or "⇄"
+  local icon_group = item_state_group(item_type, content.state)
+  local left = icon .. " "
+  local segments = {
+    { 0, icon_group, #icon },
+    { #icon, "GitHubProjectsNumber", 1 },
+  }
+  local offset = #left
+  local repo = repository_label(content)
+  if repo then
+    left = left .. repo .. " "
+    segments[#segments + 1] = { offset, "GitHubProjectsMeta", #repo }
+    segments[#segments + 1] = { offset + #repo, "GitHubProjectsMeta", 1 }
+    offset = offset + #repo + 1
   end
-  if total > #glyphs then
-    glyphs[#glyphs + 1] = { glyph = "+" .. (total - #glyphs), group = "GitHubProjectsMeta" }
-  end
-  local text = ""
-  for index, glyph in ipairs(glyphs) do
-    if index > 1 then
-      text = text .. " "
+  local number_text = "#" .. number
+  left = left .. number_text
+  segments[#segments + 1] = { offset, "GitHubProjectsNumber", #number_text }
+
+  local right = assignee_label(content)
+  if right then
+    local gap = inner - display_width(left) - display_width(right)
+    if gap >= 1 then
+      segments[#segments + 1] = { #left + gap, "GitHubProjectsMeta", #right }
+      return left .. string.rep(" ", gap) .. right, segments
     end
-    text = text .. glyph.glyph
   end
-  if display_width(text) > inner then
-    text = M.truncate(text, inner)
-  end
-  local pad = math.max(0, inner - display_width(text))
-  local segments = {}
-  local offset = pad
-  for index, glyph in ipairs(glyphs) do
-    if index > 1 then
-      offset = offset + 1
-    end
-    segments[#segments + 1] = { offset, glyph.group, #glyph.glyph }
-    offset = offset + #glyph.glyph
-  end
-  return string.rep(" ", pad) .. text, segments
+  return truncate_header(left, segments, inner)
 end
 
 local function progress_segments(content, inner)
@@ -533,47 +551,21 @@ function M.card(item, width, selected)
       end
     end
   elseif body and tonumber(body.number) and (item_type == "ISSUE" or item_type == "PULL_REQUEST") then
-    local number = tonumber(body.number)
-    local icon = item_type == "ISSUE" and "◉" or "⇄"
-    local icon_group = item_state_group(item_type, body.state)
-    local number_text = " #" .. number .. " "
-    local prefix = icon .. number_text
-    local title = sanitize(body.title)
-    local title_width = math.max(1, inner - display_width(prefix))
-    local wrapped = M.wrap(title, title_width, 1000)
-    local prefix_segments = {
-      { 0, icon_group, #icon },
-      { #icon, "GitHubProjectsNumber", #number_text },
-    }
-    if #wrapped == 0 then
-      content_lines[#content_lines + 1] = { prefix, prefix_segments }
-    else
-      content_lines[#content_lines + 1] = {
-        prefix .. wrapped[1],
-        { prefix_segments[1], prefix_segments[2], { #prefix, "GitHubProjectsCardTitle", #wrapped[1] } },
-      }
-      local indent = display_width(prefix)
-      for index = 2, #wrapped do
-        content_lines[#content_lines + 1] = {
-          string.rep(" ", indent) .. wrapped[index],
-          { { indent, "GitHubProjectsCardTitle", #wrapped[index] } },
-        }
-      end
+    local header_text, header_segments = header_line(body, item_type, inner)
+    content_lines[#content_lines + 1] = { header_text, header_segments }
+    for _, line in ipairs(M.wrap(sanitize(body.title), inner, 1000)) do
+      content_lines[#content_lines + 1] = { line, { { 0, "GitHubProjectsCardTitle", #line } } }
     end
 
     local labels_text, labels_segments = chip_segments(body, inner)
-    local avatars_text, avatars_segments = avatar_segments(body, inner)
     local progress_text, progress_spans = progress_segments(body, inner)
     local related_text, related_spans = related_segments(body, inner)
-    local has_meta = labels_text or avatars_text or progress_text or related_text
+    local has_meta = labels_text or progress_text or related_text
     if has_meta then
       content_lines[#content_lines + 1] = { "", {} }
     end
     if labels_text then
       content_lines[#content_lines + 1] = { labels_text, labels_segments }
-    end
-    if avatars_text then
-      content_lines[#content_lines + 1] = { avatars_text, avatars_segments }
     end
     if progress_text then
       content_lines[#content_lines + 1] = { progress_text, progress_spans }

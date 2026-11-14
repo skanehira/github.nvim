@@ -366,7 +366,14 @@ local function render(buf)
     local data = columns_data[selected_column - first_col + 1]
     if index and data and data.starts[index] then
       local card_start = data.starts[index]
-      cursor_line = 3 + (card_start - data.view_start + 1)
+      local item = column.items[index]
+      -- Issue and PR cards put the repo header above the title, so the title
+      -- row is one line lower than for drafts and redacted cards.
+      local title_offset = 1
+      if item and (item.type == "ISSUE" or item.type == "PULL_REQUEST") then
+        title_offset = 2
+      end
+      cursor_line = 3 + (card_start - data.view_start + 1) + (title_offset - 1)
       local offsets = content_offsets[cursor_line - 2]
       if offsets then
         cursor_col = (offsets[selected_column - first_col + 1] or cursor_col) + 4

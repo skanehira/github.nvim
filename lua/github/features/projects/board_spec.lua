@@ -327,11 +327,20 @@ describe("projects board", function()
     assert.is_not_nil(rendered[2]:find("● Todo 2", 1, true))
     assert.is_not_nil(rendered[2]:find("● In Progress 1", 1, true))
     local text = table.concat(rendered, "\n")
-    for _, expected in ipairs({ "◉ #1 Fix bug", "bug", "Ⓐ", "1/2", "⇄ #9", "✎ Draft idea" }) do
+    for _, expected in ipairs({
+      "◉ r #1",
+      "Fix bug",
+      "alice",
+      "bug",
+      "1/2",
+      "⇄ r #2",
+      "Add feature",
+      "✎ Draft idea",
+    }) do
       assert.is_not_nil(text:find(expected, 1, true), expected)
     end
     assert.is_true(#rendered > 20)
-    assert_card_cursor(win, buf, "◉ #1 Fix bug")
+    assert_card_cursor(win, buf, "Fix bug")
 
     local selected_border = highlights(buf, "GitHubProjectsCardSelectedBorder")
     assert.is_true(#selected_border >= 8)
@@ -439,7 +448,7 @@ describe("projects board", function()
     assert.equals(4, state.columns[1].count)
     assert.is_not_nil(list_lines(win)[2]:find("○ 値なし 4", 1, true))
     assert.same({ column_index = 1, item_id = "I1" }, state.selected)
-    assert.is_not_nil(list_lines(win)[4]:find("◉ #1 Fix bug", 1, true))
+    assert.is_not_nil(list_lines(win)[4]:find("◉ r #1", 1, true))
   end)
 
   it("moves between columns and items and stops at both ends", function()
@@ -449,7 +458,7 @@ describe("projects board", function()
     local win, buf = current_window("gh-projects-board")
 
     key("k")
-    assert_card_cursor(win, buf, "◉ #1 Fix bug")
+    assert_card_cursor(win, buf, "Fix bug")
     key("j")
     key("j")
     assert_card_cursor(win, buf, "✎ Draft idea")
@@ -458,17 +467,17 @@ describe("projects board", function()
     assert_card_cursor(win, buf, "✎ Draft idea")
 
     key("l")
-    assert_card_cursor(win, buf, "⇄ #2 Add feature")
+    assert_card_cursor(win, buf, "Add feature")
     assert.same({ column_index = 2, item_id = "I2" }, board.state(buf).selected)
     key("j")
-    assert_card_cursor(win, buf, "⇄ #2 Add feature")
+    assert_card_cursor(win, buf, "Add feature")
 
     key("l")
     assert_header_cursor(win, buf)
     assert.same({ column_index = 3, item_id = nil }, board.state(buf).selected)
     assert.equals(2, board.state(buf).first_col)
     assert.is_not_nil(find_line(win, "—"))
-    assert.is_not_nil(find_line(win, "⇄ #2 Add feature"))
+    assert.is_not_nil(find_line(win, "Add feature"))
 
     key("l")
     assert_card_cursor(win, buf, "[redacted]")
@@ -480,7 +489,7 @@ describe("projects board", function()
     assert.equals(3, board.state(buf).first_col)
 
     key("H")
-    assert_card_cursor(win, buf, "◉ #1 Fix bug")
+    assert_card_cursor(win, buf, "Fix bug")
     assert.equals(1, board.state(buf).first_col)
 
     key("L")
@@ -890,7 +899,7 @@ describe("projects board", function()
     respond(3, items_response({ default_items()[3], default_items()[1], default_items()[2], default_items()[4] }))
     assert.equals("alice / Board  ·  4 items  ·  filter: ", list_lines(win)[1])
     assert.same({ column_index = 1, item_id = "I1" }, board.state(buf).selected)
-    assert_card_cursor(win, buf, "◉ #1 Fix bug")
+    assert_card_cursor(win, buf, "Fix bug")
 
     key("r")
     respond(4, items_response({ default_items()[2], default_items()[3], default_items()[4] }))
@@ -940,9 +949,9 @@ describe("projects board", function()
     assert.equals("alice / Board  ·  1 items  ·  filter: assignee:alice", rendered[1])
     assert.is_not_nil(rendered[2]:find("● Todo 1", 1, true))
     assert.is_not_nil(rendered[2]:find("● In Progress 0", 1, true))
-    assert.is_not_nil(table.concat(rendered, "\n"):find("◉ #9 Newest issue", 1, true))
+    assert.is_not_nil(table.concat(rendered, "\n"):find("◉ r #9", 1, true))
     assert.same({ column_index = 1, item_id = "I9" }, board.state(buf).selected)
-    assert_card_cursor(win, buf, "◉ #9 Newest issue")
+    assert_card_cursor(win, buf, "Newest issue")
 
     key("?")
     local help_win = current_window("gh-projects-help")
@@ -1066,10 +1075,10 @@ describe("projects board", function()
 
     local rendered = list_lines(win)
     assert.equals("alice / Board  ·  4 items  ·  filter: ", rendered[1])
-    assert.is_not_nil(table.concat(rendered, "\n"):find("◉ #1 Fix bug", 1, true))
-    assert.is_not_nil(table.concat(rendered, "\n"):find("⇄ #2 Add feature", 1, true))
+    assert.is_not_nil(table.concat(rendered, "\n"):find("◉ r #1", 1, true))
+    assert.is_not_nil(table.concat(rendered, "\n"):find("⇄ r #2", 1, true))
     assert.same({ column_index = 1, item_id = "I1" }, board.state(buf).selected)
-    assert_card_cursor(win, buf, "◉ #1 Fix bug")
+    assert_card_cursor(win, buf, "Fix bug")
     assert.equals(other_tab, vim.api.nvim_get_current_tabpage())
     assert.equals(other_win, vim.api.nvim_get_current_win())
   end)
@@ -1096,7 +1105,7 @@ describe("projects board", function()
     assert.same({ column_index = 2, item_id = "I2" }, state.selected)
     assert.is_not_nil(find_line(win, "● In Progress 1"))
     assert.is_true(#list_lines(win) >= 19)
-    assert_card_cursor(win, buf, "⇄ #2 Add feature")
+    assert_card_cursor(win, buf, "Add feature")
     assert.equals(other_tab, vim.api.nvim_get_current_tabpage())
     assert.equals(other_win, vim.api.nvim_get_current_win())
   end)
@@ -1118,7 +1127,7 @@ describe("projects board", function()
     assert.equals(2, state.columns[2].count)
     assert.same({ column_index = 2, item_id = "I1" }, state.selected)
     assert.equals("I1", board.selected_item(buf).id)
-    assert_card_cursor(win, buf, "◉ #1 Fix bug")
+    assert_card_cursor(win, buf, "Fix bug")
 
     board.update_field(buf, "I1", "notes", { kind = "text", value = "note" })
     assert.same({ column_index = 2, item_id = "I1" }, state.selected)

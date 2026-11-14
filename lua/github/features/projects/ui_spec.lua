@@ -76,7 +76,7 @@ local function full_issue()
       title = "日本語のタイトル",
       state = "OPEN",
       url = "https://github.com/a/r/issues/7",
-      repository = { nameWithOwner = "a/r" },
+      repository = "a/r",
       labels = { totalCount = 3, nodes = { { name = "bug" }, { name = "修正" } } },
       assignees = { totalCount = 2, nodes = { { login = "alice" }, { login = "bob" } } },
       subIssuesSummary = { total = 4, completed = 1 },
@@ -188,16 +188,16 @@ describe("projects ui", function()
   end)
 
   describe("cards", function()
-    it("renders an Issue card with border, title, labels, avatars, progress and related PRs", function()
+    it("renders an Issue card with border, repo header, title, labels, progress and related PRs", function()
       local item = full_issue()
       local before = vim.deepcopy(item)
       local card, spans = ui.card(item, 36)
       assert.same({
         "╭──────────────────────────────────╮",
-        "│ ◉ #7 日本語のタイトル            │",
+        "│ ◉ r #7                  alice +1 │",
+        "│ 日本語のタイトル                 │",
         "│                                  │",
         "│  bug  修正  +1                   │",
-        "│                              Ⓐ Ⓑ │",
         "│ 1/4 ███████░░░░░░░░░░░░░░░░░░░░░ │",
         "│ ⇄ #12 ⇄ #13 +1                   │",
         "╰──────────────────────────────────╯",
@@ -217,8 +217,6 @@ describe("projects ui", function()
         "GitHubProjectsCardTitle",
         "GitHubProjectsLabel",
         "GitHubProjectsLabelMore",
-        "GitHubProjectsAvatar_alice",
-        "GitHubProjectsAvatar_bob",
         "GitHubProjectsProgress",
         "GitHubProjectsProgressEmpty",
         "GitHubProjectsMeta",
@@ -252,11 +250,10 @@ describe("projects ui", function()
       local card = ui.card(full_issue(), 20)
       assert.same({
         "╭──────────────────╮",
-        "│ ◉ #7 日本語のタ  │",
-        "│      イトル      │",
+        "│ ◉ r #7  alice +1 │",
+        "│ 日本語のタイトル │",
         "│                  │",
         "│  bug  修正  +1   │",
-        "│              Ⓐ Ⓑ │",
         "│ 1/4 ███░░░░░░░░░ │",
         "│ ⇄ #12 ⇄ #13 +1   │",
         "╰──────────────────╯",
@@ -282,7 +279,8 @@ describe("projects ui", function()
       local card, spans = ui.card(pull, 36)
       assert.same({
         "╭──────────────────────────────────╮",
-        "│ ⇄ #42 Fix crash                  │",
+        "│ ⇄ #42                            │",
+        "│ Fix crash                        │",
         "│                                  │",
         "│  bug                             │",
         "╰──────────────────────────────────╯",
@@ -352,7 +350,8 @@ describe("projects ui", function()
       local card, spans = ui.card(item, 36)
       assert.same({
         "╭──────────────────────────────────╮",
-        "│ ◉ #1 Only title                  │",
+        "│ ◉ #1                             │",
+        "│ Only title                       │",
         "╰──────────────────────────────────╯",
       }, contents(card))
       local groups = {}
@@ -360,7 +359,7 @@ describe("projects ui", function()
         groups[span[4]] = true
       end
       assert.is_nil(groups.GitHubProjectsLabel)
-      assert.is_nil(groups.GitHubProjectsAvatar_alice)
+      assert.is_true(groups.GitHubProjectsNumber)
       assert.is_nil(groups.GitHubProjectsProgress)
 
       card = ui.card({
@@ -376,7 +375,8 @@ describe("projects ui", function()
       }, 36)
       assert.same({
         "╭──────────────────────────────────╮",
-        "│ ⇄ #2 Only title                  │",
+        "│ ⇄ #2                             │",
+        "│ Only title                       │",
         "╰──────────────────────────────────╯",
       }, contents(card))
     end)
@@ -501,10 +501,10 @@ describe("projects ui", function()
       local card, spans = ui.card(item, 36)
       assert.same({
         "╭──────────────────────────────────╮",
-        "│ ◉ #1 T                           │",
+        "│ ◉ #1                        x +3 │",
+        "│ T                                │",
         "│                                  │",
         "│  a  b  +3                        │",
-        "│                           Ⓧ Ⓨ +2 │",
         "╰──────────────────────────────────╯",
       }, contents(card))
       local groups = {}
@@ -532,10 +532,10 @@ describe("projects ui", function()
       local card = ui.card(item, 36)
       assert.same({
         "╭──────────────────────────────────╮",
-        "│ ◉ #1 a  b c                      │",
+        "│ ◉ #1                         a b │",
+        "│ a  b c                           │",
         "│                                  │",
         "│  x y                             │",
-        "│                                Ⓐ │",
         "╰──────────────────────────────────╯",
       }, contents(card))
       for _, line in ipairs(card) do
@@ -638,7 +638,6 @@ describe("projects ui", function()
         "GitHubProjectsProgressEmpty",
         "GitHubProjectsLabel",
         "GitHubProjectsLabelMore",
-        "GitHubProjectsAvatar",
         "GitHubProjectsEmpty",
         "GitHubProjectsRedacted",
         "GitHubProjectsError",

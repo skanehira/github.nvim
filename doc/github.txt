@@ -430,8 +430,9 @@ PROJECT BOARD
     `group_by`; items without a value go to the last `○ 値なし` column.
     Column headers show `● <name> <count>` in the option color and a `+`
     at the right edge. The board float border uses the same color as
-    unselected cards. Cards use a rounded border and GitHub-like label
-    chips, assignee avatars, sub-Issue progress, and related PRs. The
+    unselected cards. Issue and PR cards show `<repo> #<number>` with the
+    assignee's login at the right and the title below, plus GitHub-like
+    label chips, sub-Issue progress, and related PRs. The
     selected card uses a thick yellow double-line border. Issue
     and PR titles wrap to as many lines as needed instead of being
     truncated; the card height grows with the title. Draft Issues show

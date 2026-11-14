@@ -63,7 +63,6 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 | `GitHubProjectsProgressEmpty` | fg `#30363d` | サブIssue進捗の未完了部分 |
 | `GitHubProjectsLabel` | fg `#e6edf3`, bg `#30363d` | 色情報のないラベルチップ |
 | `GitHubProjectsLabelMore` | fg `#e6edf3`, bg `#30363d` | ラベルの`+N` |
-| `GitHubProjectsAvatar` | fg `#ffffff`, bg `#1f6feb`, bold | 担当者アバターの既定色 |
 | `GitHubProjectsEmpty` | fg `#8b949e` | 空の列・0件の案内 |
 | `GitHubProjectsRedacted` | `Comment`へのリンク | redacted表示 |
 | `GitHubProjectsError` | `DiagnosticError`へのリンク | エラー表示 |
@@ -77,7 +76,7 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 | `GitHubProjectsColorPurple` | fg `#a371f7` | 選択肢の色 |
 | `GitHubProjectsColorBlue` | fg `#58a6ff` | 選択肢の色 |
 
-色はAPIの`color`（GRAY/RED/ORANGE/YELLOW/GREEN/PINK/PURPLE/BLUE）を対応するグループへ割り当てる。ラベルは色ごとに`GitHubProjectsLabel_<hex>`を、担当者はログインごとに`GitHubProjectsAvatar_<login>`を初回描画時に動的作成する。ラベルの文字色は背景色の輝度から黒/白を選ぶ。アバターの背景色はログインのハッシュから6色のパレットを選ぶ。すべての`GitHubProjects*`グループは`default=true`で定義し、利用者は`:hi`で上書きできる。設定キーは追加しない。
+色はAPIの`color`（GRAY/RED/ORANGE/YELLOW/GREEN/PINK/PURPLE/BLUE）を対応するグループへ割り当てる。ラベルは色ごとに`GitHubProjectsLabel_<hex>`を初回描画時に動的作成する。ラベルの文字色は背景色の輝度から黒/白を選ぶ。すべての`GitHubProjects*`グループは`default=true`で定義し、利用者は`:hi`で上書きできる。設定キーは追加しない。
 
 ### 一覧の描画
 
@@ -95,13 +94,13 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 - 項目カードは角丸の枠線付きで、背景`GitHubProjectsCard`、枠線`GitHubProjectsCardBorder`を使う。カード幅は列幅に合わせ、高さは内容に応じて変動する。枠線は背景より高いextmark priorityで描き、上・左・右・下の全辺を同じ枠線色にする。
   - 上端は`╭─...─╮`、下端は`╰─...─╯`、内容行は`│ ... │`とする。選択中のカードは太い黄色の枠線にするため、上端`╔═...═╗`、下端`╚═...═╝`、内容行`║ ... ║`の二重線にする。
   - 枠線はextmark priority 10、カード背景は1、内容は2、列背景は0で描き、列背景がカードの背景・内容・枠線を上書きしないようにする。
-  - Issue: 先頭行は`◉ #<number> <title>`。`◉`はopenなら緑、closedなら紫。タイトルは省略せず、カード幅に合わせて必要な行数だけ折り返す。2行目以降は番号プレフィックスの表示幅だけインデントする。
-  - PR: 先頭行は`⇄ #<number> <title>`。`⇄`はopenなら緑、mergedなら紫、closedなら赤。タイトルはIssueと同じく折り返す。
+  - Issue: 先頭行は`◉ <repo> #<number>`で、右端に担当者のログイン名を右寄せで表示する。`◉`はopenなら緑、closedなら紫。`<repo>`は`repository.nameWithOwner`のリポジトリ名部分で、取得できない場合は省略する。タイトルは2行目以降に左寄せで表示し、省略せずカード幅に合わせて必要な行数だけ折り返す。
+  - PR: 先頭行は`⇄ <repo> #<number>`で、右端に担当者のログイン名を右寄せで表示する。`⇄`はopenなら緑、mergedなら紫、closedなら赤。タイトルはIssueと同じく2行目以降に折り返す。
   - DraftIssue: 先頭行は`✎ <title>`。`✎`はグレー。タイトルは折り返す。
   - REDACTED: `[redacted]`を1行で表示する。
 - タイトルの後に空行1行を置き、表示できるメタ情報がある場合だけ次の行を追加する。
   - ラベルは最大2件を色付きチップ（` <name> `）で表示し、残りは`+N`とする。チップの背景はラベルの色、文字色は輝度に応じて黒/白とする。色情報がないラベルは`GitHubProjectsLabel`を使う。
-  - 担当者は最大3名を右寄せの丸文字アバター（`Ⓐ`〜`Ⓩ`、英字以外は`●`）で表示し、残りは`+N`とする。アバターの背景はログインごとの動的グループを使う。
+  - 担当者は先頭のログイン名を先頭行の右端に右寄せで表示し、2名以上なら`+N`を付ける。プロフィール画像はターミナルに描けないためログイン名で代用する。
   - サブIssueの進捗は`total > 0`のときだけ`<completed>/<total> <bar>`を表示する。バーは完了部分を`GitHubProjectsProgress`、未完了部分を`GitHubProjectsProgressEmpty`で描き、カードの右端まで埋める。
   - 関連PRは最大2件を`⇄ #<n>`で表示し、残りは`+N`とする。
 - 選択中のカードは背景を`GitHubProjectsCardSelected`、枠線を`GitHubProjectsCardSelectedBorder`（太い黄色の二重線）にし、カーソルをタイトル行に置く。空の列を選んだ場合は列ヘッダにカーソルを置く。

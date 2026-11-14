@@ -24,7 +24,6 @@ local function define()
     GitHubProjectsProgressEmpty = { fg = "#30363d" },
     GitHubProjectsLabel = { fg = "#e6edf3", bg = "#30363d" },
     GitHubProjectsLabelMore = { fg = "#e6edf3", bg = "#30363d" },
-    GitHubProjectsAvatar = { fg = "#ffffff", bg = "#1f6feb", bold = true },
     GitHubProjectsEmpty = { fg = "#8b949e" },
     GitHubProjectsColorGray = { fg = "#8b949e" },
     GitHubProjectsColorRed = { fg = "#f85149" },
