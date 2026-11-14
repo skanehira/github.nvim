@@ -469,7 +469,9 @@ local function open_body(flow, parent)
     height = height,
   })
   ui.buffer(buf, { readonly = false, filetype = "markdown" })
-  vim.api.nvim_win_set_config(win, { title = "Draft body (C-s to add, q/Esc to cancel)" })
+  vim.api.nvim_buf_set_name(buf, names(flow.board).body)
+  vim.bo[buf].buftype = "acwrite"
+  vim.api.nvim_win_set_config(win, { title = "Draft body (:w to add, q/Esc to cancel)" })
   local text = flow.body or ""
   local lines = text ~= "" and vim.split(text, "\n", { plain = true }) or { "" }
   ui.set_lines(buf, lines)
@@ -500,14 +502,17 @@ local function open_body(flow, parent)
     close_screen(names(flow.board).body, flow.screens.body)
   end
 
-  ui.keymaps(buf, {
-    n = { ["<C-s>"] = submit, q = cancel, ["<Esc>"] = cancel },
-    i = {
-      ["<C-s>"] = function()
-        vim.schedule(submit)
-      end,
-    },
+  vim.api.nvim_create_autocmd("BufWriteCmd", {
+    buffer = buf,
+    callback = function()
+      if not active() then
+        return
+      end
+      vim.bo[buf].modified = false
+      submit()
+    end,
   })
+  ui.keymaps(buf, { n = { q = cancel, ["<Esc>"] = cancel } })
   vim.cmd("startinsert!")
 end
 

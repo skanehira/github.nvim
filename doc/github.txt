@@ -619,14 +619,14 @@ Draft title:
 Draft body:
     Key       Action
     ------------------------------------------------------------------------
-    <C-s>     Add the draft Issue
+    :w        Add the draft Issue
     q / <Esc> Close the body and return to the title
 
     For a draft Issue, enter a title (`Draft title`); Enter moves to the
     body and <C-c> cancels the flow. A title that is empty or only
     whitespace is not sent and keeps the title input with a reason. The
     body is a Markdown buffer with the prompt
-    `Draft body (C-s to add, q/Esc to cancel)`; <C-s> adds the draft,
+    `Draft body (:w to add, q/Esc to cancel)`; :w adds the draft,
     and q or <Esc> closes only the body and returns to the title. The
     body may be empty. A failure keeps the body and input. Each draft
     creates a new item, so duplicates are not checked.

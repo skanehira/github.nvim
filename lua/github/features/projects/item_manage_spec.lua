@@ -639,20 +639,19 @@ describe("projects item manage", function()
       { vim.api.nvim_win_get_config(body_win).width, vim.api.nvim_win_get_config(body_win).height }
     )
     assert.same(
-      { { "Draft body (C-s to add, q/Esc to cancel)", "FloatTitle" } },
+      { { "Draft body (:w to add, q/Esc to cancel)", "FloatTitle" } },
       vim.api.nvim_win_get_config(body_win).title
     )
     assert.equals("markdown", vim.bo[body_buf].filetype)
     assert.is_true(vim.bo[body_buf].modifiable)
     assert.is_false(vim.bo[body_buf].readonly)
-    assert_mapping(body_buf, "n", "<C-S>")
+    assert.equals("acwrite", vim.bo[body_buf].buftype)
     assert_mapping(body_buf, "n", "q")
     assert_mapping(body_buf, "n", "<Esc>")
-    assert_mapping(body_buf, "i", "<C-S>")
     assert.is_true(float.is_open("projects-add:title:" .. board_buf))
 
     vim.api.nvim_buf_set_lines(body_buf, 0, -1, false, { "line1", "line2" })
-    key("<C-s>")
+    vim.cmd("write")
     assert.equals(3, #pending)
     assert.same(
       { projectId = "P1", title = "My draft", body = "line1\nline2" },
@@ -689,7 +688,7 @@ describe("projects item manage", function()
     key("<CR>")
     local _, body_buf = body_window()
     vim.api.nvim_buf_set_lines(body_buf, 0, -1, false, { "" })
-    key("<C-s>")
+    vim.cmd("write")
     assert.same({ projectId = "P1", title = "Empty body", body = "" }, vim.json.decode(calls[3].opts.stdin).variables)
     respond(
       3,
@@ -776,7 +775,7 @@ describe("projects item manage", function()
     key("<CR>")
     local body_win, body_buf = body_window()
     vim.api.nvim_buf_set_lines(body_buf, 0, -1, false, { "body" })
-    key("<C-s>")
+    vim.cmd("write")
     fail(3, 1, "HTTP 403")
     assert.same(
       { "GitHub projects: permission denied: GitHub request failed (exit 1): HTTP 403", vim.log.levels.ERROR },
@@ -786,7 +785,7 @@ describe("projects item manage", function()
     assert.same({ "body" }, buffer_lines(body_buf))
     assert.is_true(float.is_open("projects-add:title:" .. board_buf))
 
-    key("<C-s>")
+    vim.cmd("write")
     assert.equals(4, #pending)
     respond(
       4,
@@ -808,8 +807,8 @@ describe("projects item manage", function()
     local _, title_buf = input_window()
     vim.api.nvim_buf_set_lines(title_buf, 0, -1, false, { "Draft" })
     key("<CR>")
-    key("<C-s>")
-    key("<C-s>")
+    vim.cmd("write")
+    vim.cmd("write")
     assert.equals(3, #pending)
     respond(
       3,
@@ -1347,7 +1346,7 @@ describe("projects item manage", function()
     key("<CR>")
     local _, body_buf = body_window()
     vim.api.nvim_buf_set_lines(body_buf, 0, -1, false, { "本文の一行目", "本文の二行目" })
-    key("<C-s>")
+    vim.cmd("write")
     assert.same({
       projectId = "P1",
       title = "日本語の下書き",
@@ -1372,7 +1371,7 @@ describe("projects item manage", function()
     local _, title_buf = input_window()
     vim.api.nvim_buf_set_lines(title_buf, 0, -1, false, { "Filtered draft" })
     key("<CR>")
-    key("<C-s>")
+    vim.cmd("write")
     respond(
       4,
       draft_item_response(item_node({

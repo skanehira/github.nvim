@@ -570,7 +570,7 @@ describe("projects ui", function()
   describe("column headers", function()
     it("renders column headers with the option color, count and add button", function()
       local text, spans = ui.column_header({ name = "Todo", count = 3, color = "BLUE" }, 36)
-      assert.equals("● Todo 3" .. string.rep(" ", 26) .. " +", text)
+      assert.equals(" ● Todo 3" .. string.rep(" ", 24) .. " + ", text)
       assert.same({
         { 0, text, "GitHubProjectsColumnHeader" },
         { 0, "●", "GitHubProjectsColorBlue" },
@@ -580,7 +580,7 @@ describe("projects ui", function()
       }, spanned({ text }, spans))
 
       text, spans = ui.column_header({ name = "Todo", count = 3, color = "BLUE" }, 36, true)
-      assert.equals("● Todo 3" .. string.rep(" ", 26) .. " +", text)
+      assert.equals(" ● Todo 3" .. string.rep(" ", 24) .. " + ", text)
       assert.same({
         { 0, text, "GitHubProjectsColumnSelected" },
         { 0, "●", "GitHubProjectsColorBlue" },
@@ -590,7 +590,7 @@ describe("projects ui", function()
       }, spanned({ text }, spans))
 
       text, spans = ui.column_header({ no_value = true, count = 2 }, 36)
-      assert.equals("○ 値なし 2" .. string.rep(" ", 24) .. " +", text)
+      assert.equals(" ○ 値なし 2" .. string.rep(" ", 22) .. " + ", text)
       assert.same({
         { 0, text, "GitHubProjectsColumnHeader" },
         { 0, "値なし", "GitHubProjectsColumn" },
@@ -599,7 +599,7 @@ describe("projects ui", function()
       }, spanned({ text }, spans))
 
       text, spans = ui.column_header({ name = "進行中", count = 5, color = "GREEN" }, 8)
-      assert.equals("● ...  +", text)
+      assert.equals(" ●... + ", text)
       assert.same({
         { 0, text, "GitHubProjectsColumnHeader" },
         { 0, "●", "GitHubProjectsColorGreen" },

@@ -626,18 +626,21 @@ function M.column_header(column, width, selected)
   local name = column.no_value and "値なし" or sanitize(column.name)
   local count = tostring(column.count or 0)
   local plus = "+"
-  local available = math.max(1, width - display_width(plus) - 1)
-  local left = M.truncate(marker .. " " .. name .. " " .. count, available)
-  local line = pad_to(left, available) .. " " .. plus
+  local available = math.max(1, width - display_width(plus) - 2)
+  local left = M.truncate(" " .. marker .. " " .. name .. " " .. count, available)
+  local line = pad_to(left, available) .. " " .. plus .. " "
   line = pad_to(line, width)
   local spans = {}
   local bg = selected and "GitHubProjectsColumnSelected" or "GitHubProjectsColumnHeader"
   spans[#spans + 1] = { 0, 0, #line, bg, 1 }
   local group = M.color_group(column.color)
   if group then
-    spans[#spans + 1] = { 0, 0, #marker, group, 2 }
+    spans[#spans + 1] = { 0, 1, 1 + #marker, group, 2 }
   end
-  local name_start = #marker + 1
+  local name_start = 1 + #marker + 1
+  if left:sub(-#ELLIPSIS) == ELLIPSIS and #left <= 1 + #marker + #ELLIPSIS then
+    name_start = 1 + #marker
+  end
   local name_end = math.min(name_start + #name, #left)
   if name_end > name_start then
     spans[#spans + 1] = { 0, name_start, name_end, "GitHubProjectsColumn", 2 }
@@ -648,7 +651,7 @@ function M.column_header(column, width, selected)
     spans[#spans + 1] = { 0, count_start, #left, count_group, 2 }
   end
   local plus_group = selected and "GitHubProjectsColumnSelected" or "GitHubProjectsMeta"
-  spans[#spans + 1] = { 0, #line - 1, #line, plus_group, 2 }
+  spans[#spans + 1] = { 0, #line - 2, #line - 1, plus_group, 2 }
   return line, spans
 end
 
