@@ -198,7 +198,7 @@ describe("projects ui", function()
         "│                                  │",
         "│  bug  修正  +1                   │",
         "│                              Ⓐ Ⓑ │",
-        "│ 1/4 ██████░░░░░░░░░░░░░░░░░░ 25% │",
+        "│ 1/4 ███████░░░░░░░░░░░░░░░░░░░░░ │",
         "│ ⇄ #12 ⇄ #13 +1                   │",
         "╰──────────────────────────────────╯",
       }, contents(card))
@@ -257,7 +257,7 @@ describe("projects ui", function()
         "│                  │",
         "│  bug  修正  +1   │",
         "│              Ⓐ Ⓑ │",
-        "│ 1/4 ██░░░░░░ 25% │",
+        "│ 1/4 ███░░░░░░░░░ │",
         "│ ⇄ #12 ⇄ #13 +1   │",
         "╰──────────────────╯",
       }, contents(card))
@@ -465,6 +465,23 @@ describe("projects ui", function()
           end
         end
       end
+    end)
+
+    it("fills the sub-issue progress bar up to the right edge of the card", function()
+      local card, spans = ui.card(full_issue(), 36)
+      local row, bar_end
+      for _, span in ipairs(spans) do
+        if span[4] == "GitHubProjectsProgress" or span[4] == "GitHubProjectsProgressEmpty" then
+          row = row or span[1]
+          bar_end = math.max(bar_end or 0, span[3])
+        end
+      end
+      assert.is_not_nil(row)
+      local line = card[row + 1]
+      -- The line ends with " │", so the content stops 4 bytes before the end.
+      assert.equals(#line - 4, bar_end)
+      assert.is_truthy(line:find("░", 1, true))
+      assert.equals(36, vim.fn.strdisplaywidth(line))
     end)
 
     it("shows the remaining label and assignee counts as +N", function()

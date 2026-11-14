@@ -231,20 +231,21 @@ local function progress_segments(content, inner)
   end
   local completed = math.max(0, math.min(total, tonumber(summary.completed) or 0))
   local prefix = string.format("%d/%d ", completed, total)
-  local suffix = string.format(" %d%%", math.floor(completed * 100 / total))
-  local bar_width = inner - display_width(prefix) - display_width(suffix)
+  -- The bar fills the rest of the line so the track reaches the card border,
+  -- like GitHub's count-based sub-issue progress field. A trailing percent
+  -- would leave the highlight short of the right edge.
+  local bar_width = inner - display_width(prefix)
   if bar_width < 1 then
     return nil
   end
   local filled = math.floor(bar_width * completed / total)
   local filled_text = string.rep("█", filled)
   local empty_text = string.rep("░", bar_width - filled)
-  local text = prefix .. filled_text .. empty_text .. suffix
+  local text = prefix .. filled_text .. empty_text
   local segments = {
     { 0, "GitHubProjectsMeta", #prefix },
     { #prefix, "GitHubProjectsProgress", #filled_text },
     { #prefix + #filled_text, "GitHubProjectsProgressEmpty", #empty_text },
-    { #prefix + #filled_text + #empty_text, "GitHubProjectsMeta", #suffix },
   }
   local filtered = {}
   for _, segment in ipairs(segments) do
