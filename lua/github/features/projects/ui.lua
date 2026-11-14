@@ -58,6 +58,23 @@ local function label_group(color)
   return name
 end
 
+local LEFT_CAP = "\u{E0B6}"
+local RIGHT_CAP = "\u{E0B4}"
+
+-- The caps are drawn in the label color over the card background, so they only
+-- need the foreground color; the card background comes from the lower span.
+local function label_cap_group(color)
+  local hex = type(color) == "string" and color:gsub("^#", ""):lower() or ""
+  if not hex:match("^%x%x%x%x%x%x$") then
+    return "GitHubProjectsLabelCap"
+  end
+  local name = "GitHubProjectsLabelCap_" .. hex
+  if vim.fn.hlexists(name) == 0 then
+    vim.api.nvim_set_hl(0, name, { fg = "#" .. hex, default = true })
+  end
+  return name
+end
+
 local function repository_label(content)
   local repository = content.repository
   if type(repository) ~= "string" then
@@ -149,39 +166,55 @@ local function chip_segments(content, inner)
     return nil
   end
   local total = tonumber(labels.totalCount) or #labels.nodes
-  local segments, text, used = {}, "", 0
+  local segments, text, used, chips = {}, "", 0, 0
+  local function add_gap()
+    if used > 0 then
+      text = text .. " "
+      used = used + 1
+    end
+  end
+  local function add_chip(name, cap, body)
+    chips = chips + 1
+    segments[#segments + 1] = { #text, cap, #LEFT_CAP }
+    text = text .. LEFT_CAP
+    segments[#segments + 1] = { #text, body, #name }
+    text = text .. name
+    segments[#segments + 1] = { #text, cap, #RIGHT_CAP }
+    text = text .. RIGHT_CAP
+  end
   for index, label in ipairs(labels.nodes) do
     if index > 2 then
       break
     end
     local name = sanitize(label.name)
     if name ~= "" then
-      local chip = " " .. name .. " "
-      if used + display_width(chip) > inner then
-        local available = inner - used - 2
-        if available < 1 then
-          break
-        end
-        chip = " " .. M.truncate(name, available) .. " "
-      end
-      local width = display_width(chip)
-      if used + width > inner then
+      local gap = used > 0 and 1 or 0
+      local available = inner - used - gap - 2
+      if available < 1 then
         break
       end
-      segments[#segments + 1] = { #text, label_group(label.color), #chip }
-      text = text .. chip
+      if display_width(name) > available then
+        name = M.truncate(name, available)
+      end
+      local width = display_width(name) + 2
+      if used + gap + width > inner then
+        break
+      end
+      add_gap()
+      add_chip(name, label_cap_group(label.color), label_group(label.color))
       used = used + width
     end
   end
-  if #segments == 0 then
+  if chips == 0 then
     return nil
   end
-  if total > #segments then
-    local more = "+" .. (total - #segments)
-    local chip = " " .. more .. " "
-    if used + display_width(chip) <= inner then
-      segments[#segments + 1] = { #text, "GitHubProjectsLabelMore", #chip }
-      text = text .. chip
+  if total > chips then
+    local more = "+" .. (total - chips)
+    local gap = used > 0 and 1 or 0
+    local width = display_width(more) + 2
+    if used + gap + width <= inner then
+      add_gap()
+      add_chip(more, "GitHubProjectsLabelCap", "GitHubProjectsLabelMore")
     end
   end
   return text, segments
@@ -568,6 +601,9 @@ function M.card(item, width, selected)
       content_lines[#content_lines + 1] = { labels_text, labels_segments }
     end
     if progress_text then
+      if labels_text then
+        content_lines[#content_lines + 1] = { "", {} }
+      end
       content_lines[#content_lines + 1] = { progress_text, progress_spans }
     end
     if related_text then

@@ -39,6 +39,24 @@ local function contents(lines)
   return values
 end
 
+local LEFT_CAP = "\u{E0B6}"
+local RIGHT_CAP = "\u{E0B4}"
+
+local function chips(...)
+  local text = ""
+  for index, name in ipairs({ ... }) do
+    if index > 1 then
+      text = text .. " "
+    end
+    text = text .. LEFT_CAP .. name .. RIGHT_CAP
+  end
+  return text
+end
+
+local function label_line(text, inner)
+  return "│ " .. text .. string.rep(" ", inner - vim.fn.strdisplaywidth(text)) .. " │"
+end
+
 local function mapping(buf, mode, lhs)
   for _, value in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
     if value.lhs == lhs then
@@ -197,7 +215,8 @@ describe("projects ui", function()
         "│ ◉ r #7                  alice +1 │",
         "│ 日本語のタイトル                 │",
         "│                                  │",
-        "│  bug  修正  +1                   │",
+        label_line(chips("bug", "修正", "+1"), 32),
+        "│                                  │",
         "│ 1/4 ███████░░░░░░░░░░░░░░░░░░░░░ │",
         "│ ⇄ #12 ⇄ #13 +1                   │",
         "╰──────────────────────────────────╯",
@@ -216,6 +235,7 @@ describe("projects ui", function()
         "GitHubProjectsNumber",
         "GitHubProjectsCardTitle",
         "GitHubProjectsLabel",
+        "GitHubProjectsLabelCap",
         "GitHubProjectsLabelMore",
         "GitHubProjectsProgress",
         "GitHubProjectsProgressEmpty",
@@ -253,7 +273,8 @@ describe("projects ui", function()
         "│ ◉ r #7  alice +1 │",
         "│ 日本語のタイトル │",
         "│                  │",
-        "│  bug  修正  +1   │",
+        label_line(chips("bug", "修正"), 16),
+        "│                  │",
         "│ 1/4 ███░░░░░░░░░ │",
         "│ ⇄ #12 ⇄ #13 +1   │",
         "╰──────────────────╯",
@@ -282,7 +303,7 @@ describe("projects ui", function()
         "│ ⇄ #42                            │",
         "│ Fix crash                        │",
         "│                                  │",
-        "│  bug                             │",
+        label_line(chips("bug"), 32),
         "╰──────────────────────────────────╯",
       }, contents(card))
       local groups = {}
@@ -504,7 +525,7 @@ describe("projects ui", function()
         "│ ◉ #1                        x +3 │",
         "│ T                                │",
         "│                                  │",
-        "│  a  b  +3                        │",
+        label_line(chips("a", "b", "+3"), 32),
         "╰──────────────────────────────────╯",
       }, contents(card))
       local groups = {}
@@ -535,7 +556,7 @@ describe("projects ui", function()
         "│ ◉ #1                         a b │",
         "│ a  b c                           │",
         "│                                  │",
-        "│  x y                             │",
+        label_line(chips("x y"), 32),
         "╰──────────────────────────────────╯",
       }, contents(card))
       for _, line in ipairs(card) do
@@ -637,6 +658,7 @@ describe("projects ui", function()
         "GitHubProjectsProgress",
         "GitHubProjectsProgressEmpty",
         "GitHubProjectsLabel",
+        "GitHubProjectsLabelCap",
         "GitHubProjectsLabelMore",
         "GitHubProjectsEmpty",
         "GitHubProjectsRedacted",
