@@ -206,7 +206,7 @@ local function render_column(column, width, selected, selected_item_id)
   end
   if #column.items == 0 then
     lines[1] = ui.pad("—", width)
-    spans[1] = {}
+    spans[1] = { { 0, 0, #"—", "GitHubProjectsEmpty" } }
   end
   return lines, spans, starts, heights
 end
@@ -243,15 +243,18 @@ local function ensure_visible(state, width, height)
   state.offsets[column_index] = offset
 end
 
-local function compose_row(row, cells, cell_spans)
+local function compose_row(row, cells, cell_spans, bg)
   local line = ""
   local spans = {}
   local offsets = {}
   for index, cell in ipairs(cells) do
     if index > 1 then
-      line = line .. "│"
+      line = line .. " "
     end
     offsets[index] = #line
+    if bg then
+      spans[#spans + 1] = { row, #line, #line + #cell, bg }
+    end
     line = line .. cell
     for _, span in ipairs(cell_spans[index] or {}) do
       spans[#spans + 1] = { row, offsets[index] + span[2], offsets[index] + span[3], span[4] }
@@ -261,8 +264,9 @@ local function compose_row(row, cells, cell_spans)
 end
 
 local function layout(state, width)
-  local column_width = ui.column_width(width, config.projects().column_width)
-  local visible = ui.visible_columns(width, column_width)
+  local configured = config.projects().column_width
+  local visible = math.min(#state.columns, ui.visible_columns(width, configured))
+  local column_width = ui.board_column_width(width, configured, visible)
   local first_col = ui.first_col(state.first_col, visible, state.selected.column_index, #state.columns)
   return column_width, visible, first_col
 end
@@ -295,6 +299,7 @@ local function render(buf)
   })
   local lines = { header }
   local spans = {}
+  spans[#spans + 1] = { 0, 0, #header, "GitHubProjectsToolbar" }
   for _, span in ipairs(header_spans) do
     spans[#spans + 1] = span
   end
@@ -309,7 +314,8 @@ local function render(buf)
     header_cells[#header_cells + 1] = line
     header_cell_spans[#header_cell_spans + 1] = cell_spans
   end
-  local header_row, header_row_spans, header_offsets = compose_row(1, header_cells, header_cell_spans)
+  local header_row, header_row_spans, header_offsets =
+    compose_row(1, header_cells, header_cell_spans, "GitHubProjectsColumnHeader")
   lines[2] = header_row
   for _, span in ipairs(header_row_spans) do
     spans[#spans + 1] = span
@@ -320,6 +326,7 @@ local function render(buf)
   local cursor_col = header_offsets[selected_column - first_col + 1] or 0
   if #state.items == 0 then
     lines[3] = state.filter ~= "" and "No items match filter" or "No items"
+    spans[#spans + 1] = { 2, 0, #lines[3], "GitHubProjectsEmpty" }
   else
     local available = math.max(1, height - 2)
     local columns_data = {}
@@ -342,7 +349,7 @@ local function render(buf)
         cells[visible_index] = data.lines[line_index] or blank(column_width)
         cell_spans[visible_index] = data.spans[line_index] or {}
       end
-      local line, row_spans, offsets = compose_row(2 + row_index - 1, cells, cell_spans)
+      local line, row_spans, offsets = compose_row(2 + row_index - 1, cells, cell_spans, "GitHubProjectsColumnBg")
       lines[#lines + 1] = line
       for _, span in ipairs(row_spans) do
         spans[#spans + 1] = span
@@ -355,10 +362,10 @@ local function render(buf)
     local data = columns_data[selected_column - first_col + 1]
     if index and data and data.starts[index] then
       local card_start = data.starts[index]
-      cursor_line = 2 + (card_start - data.view_start + 1)
+      cursor_line = 3 + (card_start - data.view_start + 1)
       local offsets = content_offsets[cursor_line - 2]
       if offsets then
-        cursor_col = offsets[selected_column - first_col + 1] or cursor_col
+        cursor_col = (offsets[selected_column - first_col + 1] or cursor_col) + 4
       end
     end
   end

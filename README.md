@@ -134,7 +134,7 @@ Configure Projects with `setup`:
   opts = {
     projects = {
       group_by = "Status", -- single-select field used for columns
-      column_width = 36, -- 20-80
+      column_width = 36, -- 20-80; minimum width, columns auto-fit
       max_items = 1000, -- 1-10000
     },
   },

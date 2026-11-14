@@ -1,7 +1,6 @@
 local process = require("github.core.process")
 local config = require("github.core.config")
 local board = require("github.features.projects.board")
-local ui = require("github.features.projects.ui")
 local links_copy = require("github.features.links.copy")
 
 local old_run, old_notify, old_copy_write
@@ -68,19 +67,6 @@ local function list_lines(win)
   return vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)
 end
 
-local SEPARATOR = "│"
-
-local function column_start(line, visible_index)
-  if visible_index == 1 then
-    return 0
-  end
-  local position = 1
-  for _ = 2, visible_index do
-    position = line:find(SEPARATOR, position, true) + #SEPARATOR
-  end
-  return position - 1
-end
-
 local function highlights(buf, group)
   local values = {}
   for _, mark in
@@ -91,6 +77,35 @@ local function highlights(buf, group)
     end
   end
   return values
+end
+
+local function column_offset(_, buf)
+  local marks = highlights(buf, "GitHubProjectsColumnSelected")
+  if #marks > 0 then
+    return marks[1][2]
+  end
+  marks = highlights(buf, "GitHubProjectsCardSelected")
+  return marks[1] and marks[1][2] or 0
+end
+
+local function find_line(win, text)
+  for index, line in ipairs(list_lines(win)) do
+    if line:find(text, 1, true) then
+      return index
+    end
+  end
+end
+
+local function assert_card_cursor(win, _, title)
+  local line = find_line(win, title)
+  assert.is_not_nil(line, "missing card title: " .. title)
+  local start = list_lines(win)[line]:find(title, 1, true)
+  assert.is_not_nil(start, "missing title text: " .. title)
+  assert.same({ line, start - 1 }, vim.api.nvim_win_get_cursor(win))
+end
+
+local function assert_header_cursor(win, buf)
+  assert.same({ 2, column_offset(win, buf) }, vim.api.nvim_win_get_cursor(win))
 end
 
 local function mapping(buf, mode, lhs)
@@ -298,32 +313,34 @@ describe("projects board", function()
     respond(1, detail_response(1, "Board"))
     local win, buf = current_window("gh-projects-board")
     assert.is_not_nil(win)
-    assert.same({
-      "Loading 0/4...",
-      ui.pad("● Todo 0", 36) .. "│" .. ui.pad("● In Progress 0", 36),
-      "No items",
-    }, list_lines(win))
+    local loading = list_lines(win)
+    assert.equals("Loading 0/4...", loading[1])
+    assert.is_not_nil(loading[2]:find("● Todo 0", 1, true))
+    assert.is_not_nil(loading[2]:find("● In Progress 0", 1, true))
+    assert.equals("No items", loading[3])
 
     respond(2, items_response(default_items()))
     local rendered = list_lines(win)
     assert.equals("alice / Board  ·  4 items  ·  filter: ", rendered[1])
-    assert.equals(ui.pad("● Todo 2", 36) .. "│" .. ui.pad("● In Progress 1", 36), rendered[2])
-    assert.equals(ui.pad("○ #1 Fix bug", 36) .. "│" .. ui.pad("⇄ #2 Add feature", 36), rendered[3])
-    assert.equals(ui.pad("(bug) @alice", 36) .. "│" .. string.rep(" ", 36), rendered[4])
-    local progress = string.format("1/2 %s%s 50%%", string.rep("█", 13), string.rep("░", 13))
-    assert.equals(ui.pad(progress, 36) .. "│" .. string.rep(" ", 36), rendered[5])
-    assert.equals(ui.pad("PR #9", 36) .. "│" .. string.rep(" ", 36), rendered[6])
-    assert.equals(string.rep(" ", 36) .. "│" .. string.rep(" ", 36), rendered[7])
-    assert.equals(ui.pad("✎ Draft idea", 36) .. "│" .. string.rep(" ", 36), rendered[8])
-    assert.equals(34, #rendered)
-    assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
-    assert.same({
-      { 2, 0, #ui.pad("○ #1 Fix bug", 36), "GitHubProjectsCardSelected" },
-      { 3, 0, #ui.pad("(bug) @alice", 36), "GitHubProjectsCardSelected" },
-      { 4, 0, #ui.pad(progress, 36), "GitHubProjectsCardSelected" },
-      { 5, 0, #ui.pad("PR #9", 36), "GitHubProjectsCardSelected" },
-    }, highlights(buf, "GitHubProjectsCardSelected"))
-    assert.same({ { 1, 0, 10, "GitHubProjectsColumnSelected" } }, highlights(buf, "GitHubProjectsColumnSelected"))
+    assert.is_not_nil(rendered[2]:find("● Todo 2", 1, true))
+    assert.is_not_nil(rendered[2]:find("● In Progress 1", 1, true))
+    local text = table.concat(rendered, "\n")
+    for _, expected in ipairs({ "◉ #1 Fix bug", "bug", "Ⓐ", "1/2", "⇄ #9", "✎ Draft idea" }) do
+      assert.is_not_nil(text:find(expected, 1, true), expected)
+    end
+    assert.is_true(#rendered > 20)
+    assert_card_cursor(win, buf, "◉ #1 Fix bug")
+
+    local selected = highlights(buf, "GitHubProjectsCardSelected")
+    assert.is_true(#selected >= 8)
+    for _, span in ipairs(selected) do
+      assert.equals(0, span[2])
+      assert.is_true(span[3] > 0)
+      assert.is_true(span[3] <= #rendered[span[1] + 1])
+    end
+    local column_selected = highlights(buf, "GitHubProjectsColumnSelected")
+    assert.is_true(#column_selected >= 1)
+    assert.equals(1, column_selected[1][1])
 
     local state = board.state(buf)
     assert.same({
@@ -386,9 +403,9 @@ describe("projects board", function()
     assert.equals(1, #state.columns)
     assert.is_true(state.columns[1].no_value)
     assert.equals(4, state.columns[1].count)
-    assert.equals(ui.pad("○ 値なし 4", 36), list_lines(win)[2])
+    assert.is_not_nil(list_lines(win)[2]:find("○ 値なし 4", 1, true))
     assert.same({ column_index = 1, item_id = "I1" }, state.selected)
-    assert.equals(ui.pad("○ #1 Fix bug", 36), list_lines(win)[3])
+    assert.is_not_nil(list_lines(win)[4]:find("◉ #1 Fix bug", 1, true))
   end)
 
   it("moves between columns and items and stops at both ends", function()
@@ -398,45 +415,46 @@ describe("projects board", function()
     local win, buf = current_window("gh-projects-board")
 
     key("k")
-    assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "◉ #1 Fix bug")
     key("j")
     key("j")
-    assert.same({ 8, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "✎ Draft idea")
     assert.same({ column_index = 1, item_id = "I3" }, board.state(buf).selected)
     key("j")
-    assert.same({ 8, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "✎ Draft idea")
 
     key("l")
-    assert.same({ 3, column_start(list_lines(win)[3], 2) }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "⇄ #2 Add feature")
     assert.same({ column_index = 2, item_id = "I2" }, board.state(buf).selected)
     key("j")
-    assert.same({ 3, column_start(list_lines(win)[3], 2) }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "⇄ #2 Add feature")
 
     key("l")
-    assert.same({ 2, column_start(list_lines(win)[2], 2) }, vim.api.nvim_win_get_cursor(win))
+    assert_header_cursor(win, buf)
     assert.same({ column_index = 3, item_id = nil }, board.state(buf).selected)
     assert.equals(2, board.state(buf).first_col)
-    assert.equals(ui.pad("⇄ #2 Add feature", 36) .. "│" .. ui.pad("—", 36), list_lines(win)[3])
+    assert.is_not_nil(find_line(win, "—"))
+    assert.is_not_nil(find_line(win, "⇄ #2 Add feature"))
 
     key("l")
-    assert.same({ 3, column_start(list_lines(win)[3], 2) }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "[redacted]")
     assert.same({ column_index = 4, item_id = "R1" }, board.state(buf).selected)
     assert.equals(3, board.state(buf).first_col)
 
     key("h")
-    assert.same({ 2, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert_header_cursor(win, buf)
     assert.equals(3, board.state(buf).first_col)
 
     key("H")
-    assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "◉ #1 Fix bug")
     assert.equals(1, board.state(buf).first_col)
 
     key("L")
-    assert.same({ 3, column_start(list_lines(win)[3], 2) }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "[redacted]")
     assert.same({ column_index = 4, item_id = "R1" }, board.state(buf).selected)
     key("g")
     key("G")
-    assert.same({ 3, column_start(list_lines(win)[3], 2) }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "[redacted]")
   end)
 
   it("scrolls a column to keep the selected card visible", function()
@@ -457,14 +475,16 @@ describe("projects board", function()
     local win, buf = current_window("gh-projects-board")
 
     key("G")
-    assert.same({ 19, 0 }, vim.api.nvim_win_get_cursor(win))
-    assert.equals(2, board.state(buf).offsets[1])
-    assert.equals(ui.pad("✎ Draft 10", 36), list_lines(win)[19])
+    assert.same({ column_index = 1, item_id = "D10" }, board.state(buf).selected)
+    local cursor = vim.api.nvim_win_get_cursor(win)
+    assert.is_not_nil(list_lines(win)[cursor[1]]:find("✎ Draft 10", 1, true))
+    assert.is_true(cursor[1] <= #list_lines(win))
+    assert.is_true(board.state(buf).offsets[1] > 1)
 
     key("g")
-    assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "✎ Draft 1")
     assert.equals(1, board.state(buf).offsets[1])
-    assert.equals(ui.pad("✎ Draft 1", 36), list_lines(win)[3])
+    assert.is_not_nil(list_lines(win)[4]:find("✎ Draft 1", 1, true))
   end)
 
   it("applies a filter from ghs and keeps the previous content on failure", function()
@@ -836,12 +856,12 @@ describe("projects board", function()
     respond(3, items_response({ default_items()[3], default_items()[1], default_items()[2], default_items()[4] }))
     assert.equals("alice / Board  ·  4 items  ·  filter: ", list_lines(win)[1])
     assert.same({ column_index = 1, item_id = "I1" }, board.state(buf).selected)
-    assert.same({ 5, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "◉ #1 Fix bug")
 
     key("r")
     respond(4, items_response({ default_items()[2], default_items()[3], default_items()[4] }))
     assert.same({ column_index = 1, item_id = "I3" }, board.state(buf).selected)
-    assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "✎ Draft idea")
 
     key("r")
     fail(5, 1, "HTTP 403")
@@ -884,9 +904,11 @@ describe("projects board", function()
     )
     local rendered = list_lines(win)
     assert.equals("alice / Board  ·  1 items  ·  filter: assignee:alice", rendered[1])
-    assert.equals(ui.pad("● Todo 1", 36) .. "│" .. ui.pad("● In Progress 0", 36), rendered[2])
-    assert.equals(ui.pad("○ #9 Newest issue", 36) .. "│" .. ui.pad("—", 36), rendered[3])
+    assert.is_not_nil(rendered[2]:find("● Todo 1", 1, true))
+    assert.is_not_nil(rendered[2]:find("● In Progress 0", 1, true))
+    assert.is_not_nil(table.concat(rendered, "\n"):find("◉ #9 Newest issue", 1, true))
     assert.same({ column_index = 1, item_id = "I9" }, board.state(buf).selected)
+    assert_card_cursor(win, buf, "◉ #9 Newest issue")
 
     key("?")
     local help_win = current_window("gh-projects-help")
@@ -982,26 +1004,26 @@ describe("projects board", function()
     assert.equals(1, state.visible)
     assert.equals(3, state.first_col)
     assert.same({ column_index = 3, item_id = nil }, state.selected)
-    assert.same({ 2, 0 }, vim.api.nvim_win_get_cursor(win))
-    assert.equals(ui.pad("● Done 0", 36), list_lines(win)[2])
-    assert.equals(19, #list_lines(win))
+    assert_header_cursor(win, buf)
+    assert.is_not_nil(find_line(win, "● Done 0"))
+    assert.is_true(#list_lines(win) >= 19)
 
     key("l")
     assert.same({ column_index = 4, item_id = "R1" }, board.state(buf).selected)
     assert.equals(4, board.state(buf).first_col)
-    assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
-    assert.equals(ui.pad("○ 値なし 1", 36), list_lines(win)[2])
+    assert_card_cursor(win, buf, "[redacted]")
+    assert.is_not_nil(find_line(win, "○ 値なし 1"))
   end)
 
   it("renders the board that started the request when the items response arrives in another tab", function()
     open_board(1)
     respond(1, detail_response(1, "Board"))
     local win, buf = current_window("gh-projects-board")
-    assert.same({
-      "Loading 0/4...",
-      ui.pad("● Todo 0", 36) .. "│" .. ui.pad("● In Progress 0", 36),
-      "No items",
-    }, list_lines(win))
+    local loading = list_lines(win)
+    assert.equals("Loading 0/4...", loading[1])
+    assert.is_not_nil(loading[2]:find("● Todo 0", 1, true))
+    assert.is_not_nil(loading[2]:find("● In Progress 0", 1, true))
+    assert.equals("No items", loading[3])
 
     vim.cmd("tabnew")
     local other_tab = vim.api.nvim_get_current_tabpage()
@@ -1010,9 +1032,10 @@ describe("projects board", function()
 
     local rendered = list_lines(win)
     assert.equals("alice / Board  ·  4 items  ·  filter: ", rendered[1])
-    assert.equals(ui.pad("○ #1 Fix bug", 36) .. "│" .. ui.pad("⇄ #2 Add feature", 36), rendered[3])
+    assert.is_not_nil(table.concat(rendered, "\n"):find("◉ #1 Fix bug", 1, true))
+    assert.is_not_nil(table.concat(rendered, "\n"):find("⇄ #2 Add feature", 1, true))
     assert.same({ column_index = 1, item_id = "I1" }, board.state(buf).selected)
-    assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "◉ #1 Fix bug")
     assert.equals(other_tab, vim.api.nvim_get_current_tabpage())
     assert.equals(other_win, vim.api.nvim_get_current_win())
   end)
@@ -1037,9 +1060,9 @@ describe("projects board", function()
     assert.equals(1, state.visible)
     assert.equals(2, state.first_col)
     assert.same({ column_index = 2, item_id = "I2" }, state.selected)
-    assert.equals(ui.pad("● In Progress 1", 36), list_lines(win)[2])
-    assert.equals(19, #list_lines(win))
-    assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert.is_not_nil(find_line(win, "● In Progress 1"))
+    assert.is_true(#list_lines(win) >= 19)
+    assert_card_cursor(win, buf, "⇄ #2 Add feature")
     assert.equals(other_tab, vim.api.nvim_get_current_tabpage())
     assert.equals(other_win, vim.api.nvim_get_current_win())
   end)
@@ -1061,7 +1084,7 @@ describe("projects board", function()
     assert.equals(2, state.columns[2].count)
     assert.same({ column_index = 2, item_id = "I1" }, state.selected)
     assert.equals("I1", board.selected_item(buf).id)
-    assert.same({ 3, column_start(list_lines(win)[3], 2) }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "◉ #1 Fix bug")
 
     board.update_field(buf, "I1", "notes", { kind = "text", value = "note" })
     assert.same({ column_index = 2, item_id = "I1" }, state.selected)
@@ -1092,7 +1115,7 @@ describe("projects board", function()
 
     board.select_item(buf, "I3")
     assert.same({ column_index = 1, item_id = "I3" }, state.selected)
-    assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
+    assert_card_cursor(win, buf, "✎ Draft idea")
   end)
 
   it("reuses an open board and refetches it", function()

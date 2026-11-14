@@ -33,7 +33,7 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 - 同じ名前の画面が既にある場合は再利用し、内容を再取得する。ボードは`projects-board:<host>:<owner>:<number>`、一覧は`projects-list:<host>:<owner>`で識別する。同じProjectのボードを二重に開かない。
 - 子画面は親のボード/一覧が閉じたら閉じる。親が外部から閉じられた場合も子画面を閉じ、無効なwindowを操作しない。
 - バッファは`buftype=nofile`、`bufhidden=wipe`、`swapfile=false`。読み取り専用画面は`modifiable=false`、入力画面は`modifiable=true`。filetypeは一覧`gh-projects-list`、ボード`gh-projects-board`、フィールド編集`gh-projects-editor`、プレビュー`gh-projects-preview`、ヘルプ`gh-projects-help`、入力`gh-projects-input`とする。
-- 窓は`wrap=false`、`number=false`、`relativenumber=false`、`cursorline=false`、`signcolumn=no`、`foldcolumn=0`、`list=false`、`spell=false`、`scrolloff=0`とする。ボーダーと背景は既定の`FloatBorder`/`NormalFloat`を使う。
+- 窓は`wrap=false`、`number=false`、`relativenumber=false`、`cursorline=false`、`signcolumn=no`、`foldcolumn=0`、`list=false`、`spell=false`、`scrolloff=0`とする。ボーダーと背景は既定の`FloatBorder`/`NormalFloat`を使う。ボードでもfloat自体のボーダー・背景は変更せず、`winhighlight`を設定しない。列・カード・ヘッダの背景は画面内のextmarkで表現する。
 - `VimResized`で全画面の幅・高さ・中央配置を再計算する。ボードと一覧は選択と列ごとの表示位置を保って再描画する。子画面は中央へ再配置する。
 - 読み込み中は対象画面のヘッダに進行状況を表示する。ページ取得では`取得済み/総数`を更新する。失敗時は理由をエラー表示し、再取得では直前の成功内容を保持する。
 - キーマップはバッファローカルに設定し、`silent=true`、`nowait=true`とする。マウス操作は対象外とし、独自のマウス割当をしない。
@@ -44,27 +44,40 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 
 | グループ | 既定リンク | 用途 |
 | --- | --- | --- |
-| `GitHubProjectsHeader` | `Title` | Project名・件数・フィルタのヘッダ |
-| `GitHubProjectsColumn` | `Function` | 列ヘッダ |
-| `GitHubProjectsColumnSelected` | `Search` | 選択中の列ヘッダ |
-| `GitHubProjectsCard` | `Normal` | 項目カード |
-| `GitHubProjectsCardSelected` | `CursorLine` | 選択中の項目カード |
-| `GitHubProjectsNumber` | `Number` | 項目番号・種別 |
-| `GitHubProjectsMeta` | `Comment` | ラベル・担当者 |
-| `GitHubProjectsProgress` | `DiagnosticOk` | サブIssue進捗 |
-| `GitHubProjectsRedacted` | `Comment` | redacted表示 |
-| `GitHubProjectsError` | `DiagnosticError` | エラー表示 |
-| `GitHubProjectsLoading` | `DiagnosticWarn` | 読み込み表示 |
-| `GitHubProjectsColorGray` | `Comment` | 選択肢の色 |
-| `GitHubProjectsColorRed` | `DiagnosticError` | 選択肢の色 |
-| `GitHubProjectsColorOrange` | `DiagnosticWarn` | 選択肢の色 |
-| `GitHubProjectsColorYellow` | `DiagnosticWarn` | 選択肢の色 |
-| `GitHubProjectsColorGreen` | `DiagnosticOk` | 選択肢の色 |
-| `GitHubProjectsColorPink` | `Constant` | 選択肢の色 |
-| `GitHubProjectsColorPurple` | `Constant` | 選択肢の色 |
-| `GitHubProjectsColorBlue` | `Function` | 選択肢の色 |
+| グループ | 既定の色/属性 | 用途 |
+| --- | --- | --- |
+| `GitHubProjectsToolbar` | fg `#e6edf3`, bg `#161b22` | ボードのヘッダ行 |
+| `GitHubProjectsHeader` | fg `#e6edf3`, bold | Project名・件数・フィルタのヘッダ |
+| `GitHubProjectsColumnHeader` | bg `#161b22` | 列ヘッダ行の背景 |
+| `GitHubProjectsColumnBg` | bg `#161b22` | 列の本文の背景 |
+| `GitHubProjectsColumn` | fg `#e6edf3` | 列ヘッダの名前 |
+| `GitHubProjectsColumnSelected` | fg `#ffffff`, bg `#1f6feb`, bold | 選択中の列ヘッダ |
+| `GitHubProjectsCard` | fg `#e6edf3`, bg `#0d1117` | 項目カードの背景 |
+| `GitHubProjectsCardBorder` | fg `#30363d` | 項目カードの枠線 |
+| `GitHubProjectsCardSelected` | fg `#e6edf3`, bg `#161b22` | 選択中の項目カードの背景 |
+| `GitHubProjectsCardSelectedBorder` | fg `#58a6ff`, bold | 選択中の項目カードの枠線 |
+| `GitHubProjectsCardTitle` | fg `#e6edf3`, bold | カードのタイトル |
+| `GitHubProjectsNumber` | fg `#8b949e` | 項目番号・種別 |
+| `GitHubProjectsMeta` | fg `#8b949e` | 件数・ラベル以外の補助情報 |
+| `GitHubProjectsProgress` | fg `#3fb950` | サブIssue進捗の完了部分 |
+| `GitHubProjectsProgressEmpty` | fg `#30363d` | サブIssue進捗の未完了部分 |
+| `GitHubProjectsLabel` | fg `#e6edf3`, bg `#30363d` | 色情報のないラベルチップ |
+| `GitHubProjectsLabelMore` | fg `#e6edf3`, bg `#30363d` | ラベルの`+N` |
+| `GitHubProjectsAvatar` | fg `#ffffff`, bg `#1f6feb`, bold | 担当者アバターの既定色 |
+| `GitHubProjectsEmpty` | fg `#8b949e` | 空の列・0件の案内 |
+| `GitHubProjectsRedacted` | `Comment`へのリンク | redacted表示 |
+| `GitHubProjectsError` | `DiagnosticError`へのリンク | エラー表示 |
+| `GitHubProjectsLoading` | `DiagnosticWarn`へのリンク | 読み込み表示 |
+| `GitHubProjectsColorGray` | fg `#8b949e` | 選択肢の色 |
+| `GitHubProjectsColorRed` | fg `#f85149` | 選択肢の色 |
+| `GitHubProjectsColorOrange` | fg `#d29922` | 選択肢の色 |
+| `GitHubProjectsColorYellow` | fg `#d29922` | 選択肢の色 |
+| `GitHubProjectsColorGreen` | fg `#3fb950` | 選択肢の色 |
+| `GitHubProjectsColorPink` | fg `#db61a2` | 選択肢の色 |
+| `GitHubProjectsColorPurple` | fg `#a371f7` | 選択肢の色 |
+| `GitHubProjectsColorBlue` | fg `#58a6ff` | 選択肢の色 |
 
-色はAPIの`color`（GRAY/RED/ORANGE/YELLOW/GREEN/PINK/PURPLE/BLUE）を対応するグループへ割り当てる。利用者は`:hi`で上書きできる。設定キーは追加しない。
+色はAPIの`color`（GRAY/RED/ORANGE/YELLOW/GREEN/PINK/PURPLE/BLUE）を対応するグループへ割り当てる。ラベルは色ごとに`GitHubProjectsLabel_<hex>`を、担当者はログインごとに`GitHubProjectsAvatar_<login>`を初回描画時に動的作成する。ラベルの文字色は背景色の輝度から黒/白を選ぶ。アバターの背景色はログインのハッシュから6色のパレットを選ぶ。すべての`GitHubProjects*`グループは`default=true`で定義し、利用者は`:hi`で上書きできる。設定キーは追加しない。
 
 ### 一覧の描画
 
@@ -75,19 +88,23 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 
 ### ボードの描画
 
-- 1行目に`<owner> / <title>  ·  <items> items  ·  filter: <filter>`を表示する。フィルタが先頭ビュー由来なら`view: <name>  ·  filter: <filter>`とする。読み込み中は`Loading <fetched>/<total>...`、打ち切り時は`Showing <max_items> of <total>`、失敗時は`Error: <理由>`を表示する。
-- 2行目に列ヘッダを表示する。`● <name> <count>`とし、選択肢の色を付ける。選択中の列ヘッダを強調する。値なし列は`○ 値なし <count>`とする。
-- 列幅は`column_width`（既定36、20〜80）。列の区切りは`│`の1セル。表示列数は`max(1, floor((inner_width + 1) / (column_width + 1)))`とし、選択列が画面外に出るときは`first_col`を調整する。
-- 各列は独立した縦の表示位置（先頭項目のindex）を持つ。選択中の列だけを`j`/`k`でスクロールし、他の列の位置は変えない。
-- 項目カードは種別に応じて1〜4行とする。
-  - Issue: `○ #<number> <title>`、`(<labels>) @<assignees>`、`<completed>/<total> <bar>`、`PR #<n>`（関連PRがある場合）。
-  - PR: `⇄ #<number> <title>`、`(<labels>) @<assignees>`。
-  - DraftIssue: `✎ <title>`。
-  - REDACTED: `[redacted]`。
-- ラベルは先頭2件、担当者は先頭2名を表示し、残りは`+N`とする。ラベル・担当者がなければその行を省略する。サブIssueの進捗は`total > 0`のときだけ表示し、`column_width - 10`程度のバーと百分率を付ける。関連PRは先頭2件を表示し、残りは`+N`とする。
-- タイトル・ラベル・担当者は`strdisplaywidth`で列幅を超えないように切り詰め、`...`を付ける。カードの行は列幅に満たない分を空白で埋める。カード間は空行1行で区切る。
-- 空の列は列ヘッダと`—`を表示する。項目が0件のボードは列ヘッダと`No items`を表示する。フィルタが適用されている場合は、項目が0件でも`No items match filter`を優先する。
-- 選択中のカードは全行を`GitHubProjectsCardSelected`で強調し、カーソルを先頭行に置く。空の列を選んだ場合は列ヘッダにカーソルを置く。
+- 1行目に`<owner> / <title>  ·  <items> items  ·  filter: <filter>`を表示する。フィルタが先頭ビュー由来なら`view: <name>  ·  filter: <filter>`とする。読み込み中は`Loading <fetched>/<total>...`、打ち切り時は`Showing <max_items> of <total>`、失敗時は`Error: <理由>`を表示する。行全体を`GitHubProjectsToolbar`で描画する。
+- 2行目に列ヘッダを表示する。`● <name> <count>`とし、選択肢の色を付ける。値なし列は`○ 値なし <count>`とする。右端に`+`を表示する。選択中の列ヘッダは`GitHubProjectsColumnSelected`で強調し、名前・件数・`+`を白で描く。列ヘッダ行全体の背景は`GitHubProjectsColumnHeader`とする。
+- 列幅は設定`column_width`（既定36、20〜80）を最小幅として、表示領域に合わせて自動調整する。表示列数は`max(1, floor((inner_width + 1) / (column_width + 1)))`と列数の小さい方とし、実効列幅は`max(column_width, floor((inner_width - (表示列数 - 1)) / 表示列数))`とする。これにより右側に余白を残さない。列の区切りは半角スペース1セルとし、`│`は使わない。列数が表示幅を超える場合は横スクロールし、選択列が画面外に出るときは`first_col`を調整する。
+- 各列の本文は`GitHubProjectsColumnBg`の背景で塗り、列ごとに独立した縦の表示位置（先頭項目のindex）を持つ。選択中の列だけを`j`/`k`でスクロールし、他の列の位置は変えない。
+- 項目カードは角丸の枠線付きで、背景`GitHubProjectsCard`、枠線`GitHubProjectsCardBorder`を使う。カード幅は列幅に合わせ、高さは内容に応じて変動する。
+  - 上端は`╭─...─╮`、下端は`╰─...─╯`、内容行は`│ ... │`とする。
+  - Issue: 先頭行は`◉ #<number> <title>`。`◉`はopenなら緑、closedなら紫。タイトルは省略せず、カード幅に合わせて必要な行数だけ折り返す。2行目以降は番号プレフィックスの表示幅だけインデントする。
+  - PR: 先頭行は`⇄ #<number> <title>`。`⇄`はopenなら緑、mergedなら紫、closedなら赤。タイトルはIssueと同じく折り返す。
+  - DraftIssue: 先頭行は`✎ <title>`。`✎`はグレー。タイトルは折り返す。
+  - REDACTED: `[redacted]`を1行で表示する。
+- タイトルの後に空行1行を置き、表示できるメタ情報がある場合だけ次の行を追加する。
+  - ラベルは最大2件を色付きチップ（` <name> `）で表示し、残りは`+N`とする。チップの背景はラベルの色、文字色は輝度に応じて黒/白とする。色情報がないラベルは`GitHubProjectsLabel`を使う。
+  - 担当者は最大3名を右寄せの丸文字アバター（`Ⓐ`〜`Ⓩ`、英字以外は`●`）で表示し、残りは`+N`とする。アバターの背景はログインごとの動的グループを使う。
+  - サブIssueの進捗は`total > 0`のときだけ`<completed>/<total> <bar> <percent>%`を表示する。バーは完了部分を`GitHubProjectsProgress`、未完了部分を`GitHubProjectsProgressEmpty`で描く。
+  - 関連PRは最大2件を`⇄ #<n>`で表示し、残りは`+N`とする。
+- 選択中のカードは背景を`GitHubProjectsCardSelected`、枠線を`GitHubProjectsCardSelectedBorder`にし、カーソルをタイトル行に置く。空の列を選んだ場合は列ヘッダにカーソルを置く。
+- カード間は空行1行で区切る。空の列は列ヘッダと`—`を表示する。項目が0件のボードは列ヘッダと`No items`を表示する。フィルタが適用されている場合は、項目が0件でも`No items match filter`を優先する。
 - 列ヘッダとカードの強調はextmarkで行い、再描画時に名前空間をクリアする。カードの選択と列の選択は別のextmarkとする。
 
 ### ボードのナビゲーションと操作
@@ -145,11 +162,11 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 
 ## エッジケースの決定
 
-- 画面が小さい: 幅・高さを1以上にclampし、実効列幅を`min(column_width, inner_width)`とする。内側幅が1列分未満の場合は1列だけ表示し、タイトルとカード行を内側幅で切り詰める。
-- 列数: 1列でも動く。表示列数は固定列幅から計算し、端ではスクロールしない。
+- 画面が小さい: 幅・高さを1以上にclampし、実効列幅を`min(max(column_width, 自動調整幅), inner_width)`とする。内側幅が1列分未満の場合は1列だけ表示する。カード幅が10未満の場合は枠線なしの1行表示にフォールバックし、タイトルを内側幅で切り詰める。
+- 列数: 1列でも動く。表示列数は設定値を最小幅として計算し、実効幅を広げて余白を残さない。端ではスクロールしない。
 - 空: 一覧0件、ボード0件、空の列、フィルタ0件、編集可能フィールド0件、選択項目なし。
-- 長い文字列: 日本語を含むタイトル・ラベル・担当者・フィルタを`strdisplaywidth`で切り詰める。
-- カードの高さ: 選択カードが表示領域より高い場合は先頭行を表示し、カーソルを先頭行に置く。
+- 長い文字列: 日本語を含むタイトルは`strdisplaywidth`で折り返す。ラベル・担当者・フィルタは表示幅を超える分を切り詰めるか`+N`でまとめる。
+- カードの高さ: タイトルの折り返しでカードの高さは変動する。選択カードが表示領域より高い場合は先頭行を表示し、カーソルをタイトル行に置く。
 - リサイズ: `VimResized`で再配置し、選択と列ごとの位置を保つ。子画面も中央へ再配置する。
 - タブ: ボードを含むタブページが閉じられた場合、`TabClosed`でそのタブのスタックと画面状態を破棄し、以後の応答を無視する。
 - 親の終了: 親のボード/一覧が閉じたら子画面を閉じる。外部で親ウィンドウが閉じられた場合も子画面を閉じる。
@@ -168,13 +185,13 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 | 親のボードを閉じると子画面も閉じ、無効なwindowを操作しない。 | 結合 |
 | 0.10.4で幅・高さ・中央配置・`VimResized`の再配置が画面内に収まる。 | 結合 |
 | 画面が小さい場合も幅・高さが1以上で、中央配置が負の座標にならない。 | 単体 |
-| 固定列幅のカンバンで、列数が表示幅を超えると横スクロールし、選択列が画面外に出ない。 | 結合 |
+| 列幅がウィンドウ幅に合わせて自動調整され、右側に余白が残らない。列数が表示幅を超えると横スクロールし、選択列が画面外に出ない。 | 結合 |
 | 列ごとの縦位置を保持し、選択列の`j`/`k`だけがスクロールする。 | 結合 |
-| 日本語を含むタイトル・ラベル・担当者が列幅を超えず、`...`で切り詰められる。 | 単体 |
+| 日本語を含む長いタイトルが省略されず、カード幅に合わせて複数行に折り返され、カードの高さが変動する。ラベル・担当者は列幅を超えない。 | 単体 |
 | 空の列・0件のボード・フィルタ0件で、ヘッダと案内が表示され、クラッシュしない。 | 結合 |
 | 一覧・ボード・フィールド編集・選択肢・入力・確認・プレビュー・ヘルプのキーマップが登録され、通常モードで動作する。 | 結合 |
 | 挿入モードの`<CR>`/`<C-c>`マッピングが登録され、ヘッドレスで通常モードのコールバックを検証できる。 | 単体 |
-| 列ヘッダ・選択列・選択カード・番号・メタ・進捗・redacted・エラーのextmarkが正しい行/列に付く。 | 結合 |
+| 列ヘッダ・選択列・選択カードの枠線/背景・番号・ラベルチップ・アバター・進捗・redacted・エラーのextmarkが正しい行/列に付く。 | 結合 |
 | 色（GRAY/RED/ORANGE/YELLOW/GREEN/PINK/PURPLE/BLUE）が対応するハイライトグループへ割り当てられる。 | 単体 |
 | 読み込み中・失敗・打ち切りの表示がヘッダに反映され、再取得失敗では直前の内容が残る。 | 結合 |
 | 別タブのfloatを閉じたり更新したりしない。 | 結合 |

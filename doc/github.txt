@@ -65,7 +65,8 @@ the Projects settings:
     })
 <
 `projects` accepts `group_by` (default `Status`), `column_width` (20-80,
-default 36), and `max_items` (1-10000, default 1000). Other keys, unknown
+default 36; used as the minimum width and widened to fill the board), and
+`max_items` (1-10000, default 1000). Other keys, unknown
 keys in `projects`, and invalid types or values are rejected without
 applying part of the settings. See |github-projects| for the Project
 commands and keys. Run |:checkhealth| with `github` to check the gh
@@ -427,12 +428,15 @@ PROJECT BOARD
 
     Columns follow the options of the single-select field chosen by
     `group_by`; items without a value go to the last `○ 値なし` column.
-    Column headers show `● <name> <count>` in the option color. Issue
-    cards show the number, title, labels, assignees, sub-Issue progress,
-    and related PRs; PR cards show the number, title, labels, and
-    assignees; draft Issues show their title; unavailable items show
-    `[redacted]`. Columns use `column_width` and scroll horizontally when
-    they do not fit. Each column keeps its own vertical position.
+    Column headers show `● <name> <count>` in the option color and a `+`
+    at the right edge. Cards use a rounded border and GitHub-like label
+    chips, assignee avatars, sub-Issue progress, and related PRs. Issue
+    and PR titles wrap to as many lines as needed instead of being
+    truncated; the card height grows with the title. Draft Issues show
+    their title; unavailable items show `[redacted]`. Columns use
+    `column_width` as a minimum and widen to fill the board; they scroll
+    horizontally when they do not fit. Each column keeps its own vertical
+    position.
     Resizing the editor repositions the list and board and keeps the
     selection and column positions.
 
@@ -632,7 +636,8 @@ SETTINGS
     `group_by` selects the single-select field used for columns (default
     `Status`); when it does not match, the first single-select field is
     used, and without one the board has a single column. `column_width`
-    sets the column width (20-80, default 36). `max_items` limits fetched
+    sets the minimum column width (20-80, default 36); columns are
+    widened to fill the board. `max_items` limits fetched
     items (1-10000, default 1000). New values apply from the next fetch
     or redraw; existing float windows are not closed. See |github-limits|
     for the Projects limits.

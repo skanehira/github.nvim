@@ -132,6 +132,13 @@ describe("projects ui", function()
       assert.equals(3, ui.visible_columns(120, 36))
       assert.equals(3, ui.visible_columns(78, 20))
       assert.equals(1, ui.visible_columns(1, 1))
+
+      assert.equals(37, ui.board_column_width(230, 36, 6))
+      assert.equals(114, ui.board_column_width(230, 80, 2))
+      assert.equals(50, ui.board_column_width(50, 36, 1))
+      assert.equals(49, ui.board_column_width(100, 36, 2))
+      assert.equals(30, ui.board_column_width(30, 36, 1))
+      assert.equals(1, ui.board_column_width(0, 36, 1))
     end)
 
     it("keeps the selected column inside the visible range", function()
@@ -174,78 +181,151 @@ describe("projects ui", function()
   end)
 
   describe("cards", function()
-    it("renders an Issue card with number, meta, sub-issue progress and related PRs", function()
+    it("renders an Issue card with border, title, labels, avatars, progress and related PRs", function()
       local item = full_issue()
       local before = vim.deepcopy(item)
       local card, spans = ui.card(item, 36)
       assert.same({
-        "○ #7 日本語のタイトル",
-        "(bug, 修正, +1) @alice @bob",
-        "1/4 " .. string.rep("█", 6) .. string.rep("░", 20) .. " 25%",
-        "PR #12 PR #13 +1",
+        "╭──────────────────────────────────╮",
+        "│ ◉ #7 日本語のタイトル            │",
+        "│                                  │",
+        "│  bug  修正  +1                   │",
+        "│                              Ⓐ Ⓑ │",
+        "│ 1/4 ██████░░░░░░░░░░░░░░░░░░ 25% │",
+        "│ ⇄ #12 ⇄ #13 +1                   │",
+        "╰──────────────────────────────────╯",
       }, contents(card))
       for _, line in ipairs(card) do
         assert.equals(36, vim.fn.strdisplaywidth(line))
       end
-      assert.same({
-        { 0, "○ #7", "GitHubProjectsNumber" },
-        { 1, "(bug, 修正, +1) @alice @bob", "GitHubProjectsMeta" },
-        { 2, "1/4 " .. string.rep("█", 6) .. string.rep("░", 20) .. " 25%", "GitHubProjectsProgress" },
-        { 3, "PR #12 PR #13 +1", "GitHubProjectsMeta" },
-      }, spanned(card, spans))
+      local groups = {}
+      for _, span in ipairs(spans) do
+        groups[span[4]] = true
+      end
+      for _, name in ipairs({
+        "GitHubProjectsCard",
+        "GitHubProjectsCardBorder",
+        "GitHubProjectsColorGreen",
+        "GitHubProjectsNumber",
+        "GitHubProjectsCardTitle",
+        "GitHubProjectsLabel",
+        "GitHubProjectsLabelMore",
+        "GitHubProjectsAvatar_alice",
+        "GitHubProjectsAvatar_bob",
+        "GitHubProjectsProgress",
+        "GitHubProjectsProgressEmpty",
+        "GitHubProjectsMeta",
+      }) do
+        assert.is_true(groups[name], name)
+      end
       assert.same(before, item)
     end)
 
-    it("truncates Japanese titles, labels and assignees to the card width", function()
-      local card, spans = ui.card(full_issue(), 20)
+    it("wraps a long Japanese title without truncating it and grows the card", function()
+      local item = full_issue()
+      item.content.title = string.rep("日本語の長いタイトル", 6)
+      local card, spans = ui.card(item, 20)
+      for _, line in ipairs(card) do
+        assert.equals(20, vim.fn.strdisplaywidth(line))
+        assert.is_nil(line:find("...", 1, true))
+      end
+      assert.is_true(#card > 5)
+      local title_text = ""
+      for _, line in ipairs(card) do
+        local content = line:match("^│ (.-) │$") or ""
+        content = content:gsub("^%s+", ""):gsub("%s+$", "")
+        title_text = title_text .. content
+      end
+      title_text = title_text:gsub("^◉ #%d+ ", "")
+      assert.is_not_nil(title_text:find(string.rep("日本語の長いタイトル", 6), 1, true))
+      assert.is_true(#spans > 0)
+    end)
+
+    it("wraps Japanese titles at narrow widths without ellipses", function()
+      local card = ui.card(full_issue(), 20)
       assert.same({
-        "○ #7 日本語のタイ...",
-        "(bug, 修正, +1) @...",
-        "1/4 " .. string.rep("█", 2) .. string.rep("░", 8) .. " 25%",
-        "PR #12 PR #13 +1",
+        "╭──────────────────╮",
+        "│ ◉ #7 日本語のタ  │",
+        "│      イトル      │",
+        "│                  │",
+        "│  bug  修正  +1   │",
+        "│              Ⓐ Ⓑ │",
+        "│ 1/4 ██░░░░░░ 25% │",
+        "│ ⇄ #12 ⇄ #13 +1   │",
+        "╰──────────────────╯",
       }, contents(card))
       for _, line in ipairs(card) do
         assert.equals(20, vim.fn.strdisplaywidth(line))
+        assert.is_nil(line:find("...", 1, true))
       end
-      assert.equals("...", card[1]:sub(-3))
-      assert.equals("...", card[2]:sub(-3))
-      assert.same({
-        { 0, "○ #7", "GitHubProjectsNumber" },
-        { 1, "(bug, 修正, +1) @...", "GitHubProjectsMeta" },
-        { 2, "1/4 " .. string.rep("█", 2) .. string.rep("░", 8) .. " 25%", "GitHubProjectsProgress" },
-        { 3, "PR #12 PR #13 +1", "GitHubProjectsMeta" },
-      }, spanned(card, spans))
     end)
 
-    it("renders PullRequest, DraftIssue and redacted cards", function()
+    it("renders PullRequest, DraftIssue and redacted cards with borders", function()
       local pull = {
         type = "PULL_REQUEST",
         values = {},
         content = {
           number = 42,
           title = "Fix crash",
+          state = "OPEN",
           labels = { totalCount = 1, nodes = { { name = "bug" } } },
           assignees = { totalCount = 0, nodes = {} },
         },
       }
       local card, spans = ui.card(pull, 36)
-      assert.same({ "⇄ #42 Fix crash", "(bug)" }, contents(card))
       assert.same({
-        { 0, "⇄ #42", "GitHubProjectsNumber" },
-        { 1, "(bug)", "GitHubProjectsMeta" },
-      }, spanned(card, spans))
+        "╭──────────────────────────────────╮",
+        "│ ⇄ #42 Fix crash                  │",
+        "│                                  │",
+        "│  bug                             │",
+        "╰──────────────────────────────────╯",
+      }, contents(card))
+      local groups = {}
+      for _, span in ipairs(spans) do
+        groups[span[4]] = true
+      end
+      assert.is_true(groups.GitHubProjectsColorGreen)
+      assert.is_true(groups.GitHubProjectsNumber)
+      assert.is_true(groups.GitHubProjectsCardTitle)
+      assert.is_true(groups.GitHubProjectsLabel)
 
       card, spans = ui.card({ type = "DRAFT_ISSUE", values = {}, content = { title = "下書き", body = "body" } }, 20)
-      assert.same({ "✎ 下書き" }, contents(card))
-      assert.same({ { 0, "✎", "GitHubProjectsNumber" } }, spanned(card, spans))
+      assert.same({
+        "╭──────────────────╮",
+        "│ ✎ 下書き         │",
+        "╰──────────────────╯",
+      }, contents(card))
+      groups = {}
+      for _, span in ipairs(spans) do
+        groups[span[4]] = true
+      end
+      assert.is_true(groups.GitHubProjectsColorGray)
+      assert.is_true(groups.GitHubProjectsNumber)
+      assert.is_true(groups.GitHubProjectsCardTitle)
 
       card, spans = ui.card({ type = "REDACTED", values = {}, content = nil }, 20)
-      assert.same({ "[redacted]" }, contents(card))
-      assert.same({ { 0, "[redacted]", "GitHubProjectsRedacted" } }, spanned(card, spans))
+      assert.same({
+        "╭──────────────────╮",
+        "│ [redacted]       │",
+        "╰──────────────────╯",
+      }, contents(card))
+      groups = {}
+      for _, span in ipairs(spans) do
+        groups[span[4]] = true
+      end
+      assert.is_true(groups.GitHubProjectsRedacted)
 
       card, spans = ui.card({ type = "ISSUE", values = {}, content = nil }, 20)
-      assert.same({ "[redacted]" }, contents(card))
-      assert.same({ { 0, "[redacted]", "GitHubProjectsRedacted" } }, spanned(card, spans))
+      assert.same({
+        "╭──────────────────╮",
+        "│ [redacted]       │",
+        "╰──────────────────╯",
+      }, contents(card))
+      groups = {}
+      for _, span in ipairs(spans) do
+        groups[span[4]] = true
+      end
+      assert.is_true(groups.GitHubProjectsRedacted)
     end)
 
     it("omits the meta, progress and related PR lines when there is nothing to show", function()
@@ -255,6 +335,7 @@ describe("projects ui", function()
         content = {
           number = 1,
           title = "Only title",
+          state = "OPEN",
           labels = { totalCount = 0, nodes = {} },
           assignees = { totalCount = 0, nodes = {} },
           subIssuesSummary = { total = 0, completed = 0 },
@@ -262,33 +343,52 @@ describe("projects ui", function()
         },
       }
       local card, spans = ui.card(item, 36)
-      assert.equals(1, #card)
-      assert.same({ "○ #1 Only title" }, contents(card))
-      assert.same({ { 0, "○ #1", "GitHubProjectsNumber" } }, spanned(card, spans))
+      assert.same({
+        "╭──────────────────────────────────╮",
+        "│ ◉ #1 Only title                  │",
+        "╰──────────────────────────────────╯",
+      }, contents(card))
+      local groups = {}
+      for _, span in ipairs(spans) do
+        groups[span[4]] = true
+      end
+      assert.is_nil(groups.GitHubProjectsLabel)
+      assert.is_nil(groups.GitHubProjectsAvatar_alice)
+      assert.is_nil(groups.GitHubProjectsProgress)
 
-      card, spans = ui.card({
+      card = ui.card({
         type = "PULL_REQUEST",
         values = {},
         content = {
           number = 2,
           title = "Only title",
+          state = "OPEN",
           labels = { totalCount = 0, nodes = {} },
           assignees = { totalCount = 0, nodes = {} },
         },
       }, 36)
-      assert.equals(1, #card)
-      assert.same({ "⇄ #2 Only title" }, contents(card))
-      assert.same({ { 0, "⇄ #2", "GitHubProjectsNumber" } }, spanned(card, spans))
+      assert.same({
+        "╭──────────────────────────────────╮",
+        "│ ⇄ #2 Only title                  │",
+        "╰──────────────────────────────────╯",
+      }, contents(card))
     end)
 
-    it("highlights every line of a selected card", function()
+    it("highlights every line of a selected card with background and border spans", function()
       local card, spans = ui.card(full_issue(), 36, true)
-      assert.equals(#card, #spans)
-      for index, span in ipairs(spans) do
-        assert.equals(index - 1, span[1])
-        assert.equals("GitHubProjectsCardSelected", span[4])
-        assert.equals(0, span[2])
-        assert.equals(#card[index], span[3])
+      local background, border = {}, {}
+      for _, span in ipairs(spans) do
+        if span[4] == "GitHubProjectsCardSelected" then
+          assert.equals(0, span[2])
+          assert.equals(#card[span[1] + 1], span[3])
+          background[span[1]] = true
+        elseif span[4] == "GitHubProjectsCardSelectedBorder" then
+          border[span[1]] = true
+        end
+      end
+      for index = 0, #card - 1 do
+        assert.is_true(background[index], "missing selected background on line " .. index)
+        assert.is_true(border[index], "missing selected border on line " .. index)
       end
     end)
 
@@ -299,14 +399,28 @@ describe("projects ui", function()
         content = {
           number = 1,
           title = "T",
+          state = "OPEN",
           labels = { totalCount = 5, nodes = { { name = "a" }, { name = "b" } } },
           assignees = { totalCount = 4, nodes = { { login = "x" }, { login = "y" } } },
           subIssuesSummary = { total = 0, completed = 0 },
           closedByPullRequestsReferences = { totalCount = 0, nodes = {} },
         },
       }
-      local card = ui.card(item, 36)
-      assert.same({ "○ #1 T", "(a, b, +3) @x @y +2" }, contents(card))
+      local card, spans = ui.card(item, 36)
+      assert.same({
+        "╭──────────────────────────────────╮",
+        "│ ◉ #1 T                           │",
+        "│                                  │",
+        "│  a  b  +3                        │",
+        "│                           Ⓧ Ⓨ +2 │",
+        "╰──────────────────────────────────╯",
+      }, contents(card))
+      local groups = {}
+      for _, span in ipairs(spans) do
+        groups[span[4]] = true
+      end
+      assert.is_true(groups.GitHubProjectsLabelMore)
+      assert.is_true(groups.GitHubProjectsMeta)
     end)
 
     it("keeps control characters out of card text", function()
@@ -316,6 +430,7 @@ describe("projects ui", function()
         content = {
           number = 1,
           title = "a\r\nb\tc",
+          state = "OPEN",
           labels = { totalCount = 1, nodes = { { name = "x\ny" } } },
           assignees = { totalCount = 1, nodes = { { login = "a\tb" } } },
           subIssuesSummary = { total = 0, completed = 0 },
@@ -323,32 +438,60 @@ describe("projects ui", function()
         },
       }
       local card = ui.card(item, 36)
-      assert.same({ "○ #1 a  b c", "(x y) @a b" }, contents(card))
+      assert.same({
+        "╭──────────────────────────────────╮",
+        "│ ◉ #1 a  b c                      │",
+        "│                                  │",
+        "│  x y                             │",
+        "│                                Ⓐ │",
+        "╰──────────────────────────────────╯",
+      }, contents(card))
+      for _, line in ipairs(card) do
+        assert.is_nil(line:find("\r", 1, true))
+        assert.is_nil(line:find("\t", 1, true))
+        assert.is_nil(line:find("\n", 1, true))
+      end
     end)
   end)
 
   describe("column headers", function()
-    it("renders column headers with the option color and selection", function()
+    it("renders column headers with the option color, count and add button", function()
       local text, spans = ui.column_header({ name = "Todo", count = 3, color = "BLUE" }, 36)
-      assert.equals("● Todo 3" .. string.rep(" ", 28), text)
+      assert.equals("● Todo 3" .. string.rep(" ", 26) .. " +", text)
       assert.same({
+        { 0, text, "GitHubProjectsColumnHeader" },
         { 0, "●", "GitHubProjectsColorBlue" },
-        { 0, "Todo 3", "GitHubProjectsColumn" },
+        { 0, "Todo", "GitHubProjectsColumn" },
+        { 0, "3", "GitHubProjectsMeta" },
+        { 0, "+", "GitHubProjectsMeta" },
       }, spanned({ text }, spans))
 
       text, spans = ui.column_header({ name = "Todo", count = 3, color = "BLUE" }, 36, true)
-      assert.equals("● Todo 3" .. string.rep(" ", 28), text)
-      assert.same({ { 0, "● Todo 3", "GitHubProjectsColumnSelected" } }, spanned({ text }, spans))
+      assert.equals("● Todo 3" .. string.rep(" ", 26) .. " +", text)
+      assert.same({
+        { 0, text, "GitHubProjectsColumnSelected" },
+        { 0, "●", "GitHubProjectsColorBlue" },
+        { 0, "Todo", "GitHubProjectsColumn" },
+        { 0, "3", "GitHubProjectsColumnSelected" },
+        { 0, "+", "GitHubProjectsColumnSelected" },
+      }, spanned({ text }, spans))
 
       text, spans = ui.column_header({ no_value = true, count = 2 }, 36)
-      assert.equals("○ 値なし 2" .. string.rep(" ", 26), text)
-      assert.same({ { 0, "○ 値なし 2", "GitHubProjectsColumn" } }, spanned({ text }, spans))
+      assert.equals("○ 値なし 2" .. string.rep(" ", 24) .. " +", text)
+      assert.same({
+        { 0, text, "GitHubProjectsColumnHeader" },
+        { 0, "値なし", "GitHubProjectsColumn" },
+        { 0, "2", "GitHubProjectsMeta" },
+        { 0, "+", "GitHubProjectsMeta" },
+      }, spanned({ text }, spans))
 
       text, spans = ui.column_header({ name = "進行中", count = 5, color = "GREEN" }, 8)
-      assert.equals("● 進... ", text)
+      assert.equals("● ...  +", text)
       assert.same({
+        { 0, text, "GitHubProjectsColumnHeader" },
         { 0, "●", "GitHubProjectsColorGreen" },
-        { 0, "進...", "GitHubProjectsColumn" },
+        { 0, "...", "GitHubProjectsColumn" },
+        { 0, "+", "GitHubProjectsMeta" },
       }, spanned({ text }, spans))
     end)
   end)
@@ -373,31 +516,53 @@ describe("projects ui", function()
       assert.is_nil(ui.color_group(nil))
     end)
 
-    it("defines the project highlight groups as default links", function()
-      local expected = {
-        { "GitHubProjectsHeader", "Title" },
-        { "GitHubProjectsColumn", "Function" },
-        { "GitHubProjectsColumnSelected", "Search" },
-        { "GitHubProjectsCard", "Normal" },
-        { "GitHubProjectsCardSelected", "CursorLine" },
-        { "GitHubProjectsNumber", "Number" },
-        { "GitHubProjectsMeta", "Comment" },
-        { "GitHubProjectsProgress", "DiagnosticOk" },
-        { "GitHubProjectsRedacted", "Comment" },
-        { "GitHubProjectsError", "DiagnosticError" },
-        { "GitHubProjectsLoading", "DiagnosticWarn" },
-        { "GitHubProjectsColorGray", "Comment" },
-        { "GitHubProjectsColorRed", "DiagnosticError" },
-        { "GitHubProjectsColorOrange", "DiagnosticWarn" },
-        { "GitHubProjectsColorYellow", "DiagnosticWarn" },
-        { "GitHubProjectsColorGreen", "DiagnosticOk" },
-        { "GitHubProjectsColorPink", "Constant" },
-        { "GitHubProjectsColorPurple", "Constant" },
-        { "GitHubProjectsColorBlue", "Function" },
+    it("defines the project highlight groups with GitHub-like defaults", function()
+      local groups = {
+        "GitHubProjectsToolbar",
+        "GitHubProjectsHeader",
+        "GitHubProjectsColumnHeader",
+        "GitHubProjectsColumnBg",
+        "GitHubProjectsColumn",
+        "GitHubProjectsColumnSelected",
+        "GitHubProjectsCard",
+        "GitHubProjectsCardBorder",
+        "GitHubProjectsCardSelected",
+        "GitHubProjectsCardSelectedBorder",
+        "GitHubProjectsCardTitle",
+        "GitHubProjectsNumber",
+        "GitHubProjectsMeta",
+        "GitHubProjectsProgress",
+        "GitHubProjectsProgressEmpty",
+        "GitHubProjectsLabel",
+        "GitHubProjectsLabelMore",
+        "GitHubProjectsAvatar",
+        "GitHubProjectsEmpty",
+        "GitHubProjectsRedacted",
+        "GitHubProjectsError",
+        "GitHubProjectsLoading",
+        "GitHubProjectsColorGray",
+        "GitHubProjectsColorRed",
+        "GitHubProjectsColorOrange",
+        "GitHubProjectsColorYellow",
+        "GitHubProjectsColorGreen",
+        "GitHubProjectsColorPink",
+        "GitHubProjectsColorPurple",
+        "GitHubProjectsColorBlue",
       }
-      for _, case in ipairs(expected) do
-        assert.equals(case[2], vim.api.nvim_get_hl(0, { name = case[1], link = true }).link)
+      for _, name in ipairs(groups) do
+        assert.equals(1, vim.fn.hlexists(name), name)
       end
+      assert.equals("Comment", vim.api.nvim_get_hl(0, { name = "GitHubProjectsRedacted", link = true }).link)
+      assert.equals("DiagnosticError", vim.api.nvim_get_hl(0, { name = "GitHubProjectsError", link = true }).link)
+      assert.equals("DiagnosticWarn", vim.api.nvim_get_hl(0, { name = "GitHubProjectsLoading", link = true }).link)
+      assert.equals(0x161b22, vim.api.nvim_get_hl(0, { name = "GitHubProjectsToolbar" }).bg)
+      assert.equals(0x1f6feb, vim.api.nvim_get_hl(0, { name = "GitHubProjectsColumnSelected" }).bg)
+      assert.equals(0x0d1117, vim.api.nvim_get_hl(0, { name = "GitHubProjectsCard" }).bg)
+      assert.equals(0x30363d, vim.api.nvim_get_hl(0, { name = "GitHubProjectsCardBorder" }).fg)
+      assert.equals(0x58a6ff, vim.api.nvim_get_hl(0, { name = "GitHubProjectsCardSelectedBorder" }).fg)
+      assert.is_true(vim.api.nvim_get_hl(0, { name = "GitHubProjectsCardTitle" }).bold)
+      assert.equals(0x3fb950, vim.api.nvim_get_hl(0, { name = "GitHubProjectsColorGreen" }).fg)
+      assert.equals(0x58a6ff, vim.api.nvim_get_hl(0, { name = "GitHubProjectsColorBlue" }).fg)
     end)
   end)
 
