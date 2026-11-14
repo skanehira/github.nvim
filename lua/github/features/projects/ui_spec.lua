@@ -386,17 +386,68 @@ describe("projects ui", function()
       local background, border = {}, {}
       for _, span in ipairs(spans) do
         if span[4] == "GitHubProjectsCardSelected" then
-          assert.equals(0, span[2])
-          assert.equals(#card[span[1] + 1], span[3])
+          assert.equals(3, span[2])
+          assert.equals(#card[span[1] + 1] - 3, span[3])
           background[span[1]] = true
         elseif span[4] == "GitHubProjectsCardSelectedBorder" then
           border[span[1]] = true
         end
       end
       for index = 0, #card - 1 do
-        assert.is_true(background[index], "missing selected background on line " .. index)
         assert.is_true(border[index], "missing selected border on line " .. index)
       end
+      for index = 1, #card - 2 do
+        assert.is_true(background[index], "missing selected background on line " .. index)
+      end
+      assert.is_nil(background[0], "unexpected background on the top border")
+      assert.is_nil(background[#card - 1], "unexpected background on the bottom border")
+    end)
+
+    it("draws the selected border above the background on every side", function()
+      local card, spans = ui.card(full_issue(), 36, true)
+      local top_bottom, left, right = false, false, false
+      for _, span in ipairs(spans) do
+        if span[4] == "GitHubProjectsCardSelectedBorder" then
+          assert.equals(10, span[5])
+          local line = card[span[1] + 1]
+          if span[2] == 0 and span[3] == #line then
+            top_bottom = true
+          elseif span[2] == 0 and span[3] == 3 then
+            left = true
+          elseif span[2] == #line - 3 and span[3] == #line then
+            right = true
+          end
+        end
+      end
+      assert.is_true(top_bottom, "missing top/bottom border")
+      assert.is_true(left, "missing left border")
+      assert.is_true(right, "missing right border")
+    end)
+
+    it("uses the same border group on every side of an unselected card", function()
+      local card, spans = ui.card(full_issue(), 36, false)
+      local left, right = false, false
+      for _, span in ipairs(spans) do
+        if span[4] == "GitHubProjectsCardBorder" then
+          assert.equals(10, span[5])
+          local line = card[span[1] + 1]
+          if span[2] == 0 and span[3] == 3 then
+            left = true
+          elseif span[2] == #line - 3 and span[3] == #line then
+            right = true
+          end
+        end
+      end
+      assert.is_true(left, "missing left border")
+      assert.is_true(right, "missing right border")
+    end)
+
+    it("uses a double-line border for a selected card", function()
+      local card = ui.card(full_issue(), 36, true)
+      assert.equals("╔" .. string.rep("═", 34) .. "╗", card[1])
+      assert.equals("╚" .. string.rep("═", 34) .. "╝", card[#card])
+      assert.equals("║", card[2]:sub(1, 3))
+      assert.equals("║", card[2]:sub(-3))
     end)
 
     it("shows the remaining label and assignee counts as +N", function()
@@ -565,8 +616,11 @@ describe("projects ui", function()
       assert.equals(0x161b22, vim.api.nvim_get_hl(0, { name = "GitHubProjectsToolbar" }).bg)
       assert.equals(0x1f6feb, vim.api.nvim_get_hl(0, { name = "GitHubProjectsColumnSelected" }).bg)
       assert.equals(0x0d1117, vim.api.nvim_get_hl(0, { name = "GitHubProjectsCard" }).bg)
-      assert.equals(0x30363d, vim.api.nvim_get_hl(0, { name = "GitHubProjectsCardBorder" }).fg)
-      assert.equals(0x58a6ff, vim.api.nvim_get_hl(0, { name = "GitHubProjectsCardSelectedBorder" }).fg)
+      assert.equals(0xe6edf3, vim.api.nvim_get_hl(0, { name = "GitHubProjectsCardBorder" }).fg)
+      assert.equals(0x0d1117, vim.api.nvim_get_hl(0, { name = "GitHubProjectsCardBorder" }).bg)
+      assert.equals(0xf1c40f, vim.api.nvim_get_hl(0, { name = "GitHubProjectsCardSelectedBorder" }).fg)
+      assert.equals(0x161b22, vim.api.nvim_get_hl(0, { name = "GitHubProjectsCardSelectedBorder" }).bg)
+      assert.is_true(vim.api.nvim_get_hl(0, { name = "GitHubProjectsCardSelectedBorder" }).bold)
       assert.is_true(vim.api.nvim_get_hl(0, { name = "GitHubProjectsCardTitle" }).bold)
       assert.equals(0x3fb950, vim.api.nvim_get_hl(0, { name = "GitHubProjectsColorGreen" }).fg)
       assert.equals(0x58a6ff, vim.api.nvim_get_hl(0, { name = "GitHubProjectsColorBlue" }).fg)
@@ -587,6 +641,23 @@ describe("projects ui", function()
       }, highlights(buf))
       ui.apply(buf, {})
       assert.same({}, highlights(buf))
+    end)
+
+    it("passes the span priority to the extmark", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "│ card │" })
+      ui.apply(buf, {
+        { 0, 0, 8, "GitHubProjectsCard" },
+        { 0, 0, 8, "GitHubProjectsCardBorder", 10 },
+      })
+      local priorities = {}
+      for _, mark in
+        ipairs(vim.api.nvim_buf_get_extmarks(buf, vim.api.nvim_get_namespaces().github, 0, -1, { details = true }))
+      do
+        priorities[mark[4].hl_group] = mark[4].priority
+      end
+      assert.equals(0, priorities.GitHubProjectsCard)
+      assert.equals(10, priorities.GitHubProjectsCardBorder)
     end)
   end)
 

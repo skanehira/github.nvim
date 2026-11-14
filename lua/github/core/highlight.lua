@@ -14,9 +14,9 @@ local function define()
     GitHubProjectsColumn = { fg = "#e6edf3" },
     GitHubProjectsColumnSelected = { fg = "#ffffff", bg = "#1f6feb", bold = true },
     GitHubProjectsCard = { fg = "#e6edf3", bg = "#0d1117" },
-    GitHubProjectsCardBorder = { fg = "#30363d" },
+    GitHubProjectsCardBorder = { fg = "#e6edf3", bg = "#0d1117" },
     GitHubProjectsCardSelected = { fg = "#e6edf3", bg = "#161b22" },
-    GitHubProjectsCardSelectedBorder = { fg = "#58a6ff", bold = true },
+    GitHubProjectsCardSelectedBorder = { fg = "#f1c40f", bg = "#161b22", bold = true },
     GitHubProjectsCardTitle = { fg = "#e6edf3", bold = true },
     GitHubProjectsNumber = { fg = "#8b949e" },
     GitHubProjectsMeta = { fg = "#8b949e" },
@@ -69,7 +69,11 @@ function M.set(buf, spans)
   vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
   for _, span in ipairs(spans) do
     if span[3] > span[2] then
-      vim.api.nvim_buf_set_extmark(buf, namespace, span[1], span[2], { end_col = span[3], hl_group = span[4] })
+      vim.api.nvim_buf_set_extmark(buf, namespace, span[1], span[2], {
+        end_col = span[3],
+        hl_group = span[4],
+        priority = span[5] or 0,
+      })
     end
   end
 end

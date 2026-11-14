@@ -53,9 +53,9 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 | `GitHubProjectsColumn` | fg `#e6edf3` | 列ヘッダの名前 |
 | `GitHubProjectsColumnSelected` | fg `#ffffff`, bg `#1f6feb`, bold | 選択中の列ヘッダ |
 | `GitHubProjectsCard` | fg `#e6edf3`, bg `#0d1117` | 項目カードの背景 |
-| `GitHubProjectsCardBorder` | fg `#30363d` | 項目カードの枠線 |
+| `GitHubProjectsCardBorder` | fg `#e6edf3`, bg `#0d1117` | 項目カードの枠線 |
 | `GitHubProjectsCardSelected` | fg `#e6edf3`, bg `#161b22` | 選択中の項目カードの背景 |
-| `GitHubProjectsCardSelectedBorder` | fg `#58a6ff`, bold | 選択中の項目カードの枠線 |
+| `GitHubProjectsCardSelectedBorder` | fg `#f1c40f`, bg `#161b22`, bold | 選択中の項目カードの枠線（太い黄色） |
 | `GitHubProjectsCardTitle` | fg `#e6edf3`, bold | カードのタイトル |
 | `GitHubProjectsNumber` | fg `#8b949e` | 項目番号・種別 |
 | `GitHubProjectsMeta` | fg `#8b949e` | 件数・ラベル以外の補助情報 |
@@ -92,8 +92,8 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 - 2行目に列ヘッダを表示する。`● <name> <count>`とし、選択肢の色を付ける。値なし列は`○ 値なし <count>`とする。右端に`+`を表示する。選択中の列ヘッダは`GitHubProjectsColumnSelected`で強調し、名前・件数・`+`を白で描く。列ヘッダ行全体の背景は`GitHubProjectsColumnHeader`とする。
 - 列幅は設定`column_width`（既定36、20〜80）を最小幅として、表示領域に合わせて自動調整する。表示列数は`max(1, floor((inner_width + 1) / (column_width + 1)))`と列数の小さい方とし、実効列幅は`max(column_width, floor((inner_width - (表示列数 - 1)) / 表示列数))`とし、割り切れない余りは最後の表示列に加えて合計を`inner_width`にする。これにより右側に余白を残さない。列の区切りは半角スペース1セルとし、`│`は使わない。列数が表示幅を超える場合は横スクロールし、選択列が画面外に出るときは`first_col`を調整する。
 - 各列の本文は`GitHubProjectsColumnBg`の背景で塗り、列ごとに独立した縦の表示位置（先頭項目のindex）を持つ。選択中の列だけを`j`/`k`でスクロールし、他の列の位置は変えない。
-- 項目カードは角丸の枠線付きで、背景`GitHubProjectsCard`、枠線`GitHubProjectsCardBorder`を使う。カード幅は列幅に合わせ、高さは内容に応じて変動する。
-  - 上端は`╭─...─╮`、下端は`╰─...─╯`、内容行は`│ ... │`とする。
+- 項目カードは角丸の枠線付きで、背景`GitHubProjectsCard`、枠線`GitHubProjectsCardBorder`を使う。カード幅は列幅に合わせ、高さは内容に応じて変動する。枠線は背景より高いextmark priorityで描き、上・左・右・下の全辺を同じ枠線色にする。
+  - 上端は`╭─...─╮`、下端は`╰─...─╯`、内容行は`│ ... │`とする。選択中のカードは太い黄色の枠線にするため、上端`╔═...═╗`、下端`╚═...═╝`、内容行`║ ... ║`の二重線にする。
   - Issue: 先頭行は`◉ #<number> <title>`。`◉`はopenなら緑、closedなら紫。タイトルは省略せず、カード幅に合わせて必要な行数だけ折り返す。2行目以降は番号プレフィックスの表示幅だけインデントする。
   - PR: 先頭行は`⇄ #<number> <title>`。`⇄`はopenなら緑、mergedなら紫、closedなら赤。タイトルはIssueと同じく折り返す。
   - DraftIssue: 先頭行は`✎ <title>`。`✎`はグレー。タイトルは折り返す。
@@ -103,7 +103,7 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
   - 担当者は最大3名を右寄せの丸文字アバター（`Ⓐ`〜`Ⓩ`、英字以外は`●`）で表示し、残りは`+N`とする。アバターの背景はログインごとの動的グループを使う。
   - サブIssueの進捗は`total > 0`のときだけ`<completed>/<total> <bar> <percent>%`を表示する。バーは完了部分を`GitHubProjectsProgress`、未完了部分を`GitHubProjectsProgressEmpty`で描く。
   - 関連PRは最大2件を`⇄ #<n>`で表示し、残りは`+N`とする。
-- 選択中のカードは背景を`GitHubProjectsCardSelected`、枠線を`GitHubProjectsCardSelectedBorder`にし、カーソルをタイトル行に置く。空の列を選んだ場合は列ヘッダにカーソルを置く。
+- 選択中のカードは背景を`GitHubProjectsCardSelected`、枠線を`GitHubProjectsCardSelectedBorder`（太い黄色の二重線）にし、カーソルをタイトル行に置く。空の列を選んだ場合は列ヘッダにカーソルを置く。
 - カード間は空行1行で区切る。空の列は列ヘッダと`—`を表示する。項目が0件のボードは列ヘッダと`No items`を表示する。フィルタが適用されている場合は、項目が0件でも`No items match filter`を優先する。
 - 列ヘッダとカードの強調はextmarkで行い、再描画時に名前空間をクリアする。カードの選択と列の選択は別のextmarkとする。
 

@@ -84,7 +84,7 @@ local function column_offset(_, buf)
   if #marks > 0 then
     return marks[1][2]
   end
-  marks = highlights(buf, "GitHubProjectsCardSelected")
+  marks = highlights(buf, "GitHubProjectsCardSelectedBorder")
   return marks[1] and marks[1][2] or 0
 end
 
@@ -333,10 +333,12 @@ describe("projects board", function()
     assert.is_true(#rendered > 20)
     assert_card_cursor(win, buf, "◉ #1 Fix bug")
 
+    local selected_border = highlights(buf, "GitHubProjectsCardSelectedBorder")
+    assert.is_true(#selected_border >= 8)
     local selected = highlights(buf, "GitHubProjectsCardSelected")
-    assert.is_true(#selected >= 8)
+    assert.is_true(#selected >= 3)
     for _, span in ipairs(selected) do
-      assert.equals(0, span[2])
+      assert.equals(3, span[2])
       assert.is_true(span[3] > 0)
       assert.is_true(span[3] <= #rendered[span[1] + 1])
     end

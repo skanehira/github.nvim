@@ -454,22 +454,45 @@ function M.card(item, width, selected)
   local inner = width - 4
   local bg = selected and "GitHubProjectsCardSelected" or "GitHubProjectsCard"
   local border = selected and "GitHubProjectsCardSelectedBorder" or "GitHubProjectsCardBorder"
+  local border_chars = selected
+      and {
+        top_left = "╔",
+        top_right = "╗",
+        bottom_left = "╚",
+        bottom_right = "╝",
+        horizontal = "═",
+        vertical = "║",
+      }
+    or {
+      top_left = "╭",
+      top_right = "╮",
+      bottom_left = "╰",
+      bottom_right = "╯",
+      horizontal = "─",
+      vertical = "│",
+    }
+  -- Draw the border above the card background so all four sides use the
+  -- border group, including the right edge.
+  local border_priority = 10
   local lines, spans = {}, {}
 
   local function add_border(text)
     lines[#lines + 1] = text
     local row = #lines - 1
-    spans[#spans + 1] = { row, 0, #text, bg }
-    spans[#spans + 1] = { row, 0, #text, border }
+    -- The border group carries the card background, so this single span
+    -- paints both the border glyphs and the card background behind them.
+    spans[#spans + 1] = { row, 0, #text, border, border_priority }
   end
 
   local function add_line(text, segments)
-    local line = "│ " .. pad_to(text, inner) .. " │"
+    local line = border_chars.vertical .. " " .. pad_to(text, inner) .. " " .. border_chars.vertical
     lines[#lines + 1] = line
     local row = #lines - 1
-    spans[#spans + 1] = { row, 0, #line, bg }
-    spans[#spans + 1] = { row, 0, 3, border }
-    spans[#spans + 1] = { row, #line - 3, #line, border }
+    -- Keep the background span between the side borders so the borders are
+    -- never overridden by a wider background span.
+    spans[#spans + 1] = { row, 0, 3, border, border_priority }
+    spans[#spans + 1] = { row, #line - 3, #line, border, border_priority }
+    spans[#spans + 1] = { row, 3, #line - 3, bg }
     for _, segment in ipairs(segments or {}) do
       local start = 4 + segment[1]
       local stop = start + segment[3]
@@ -479,7 +502,7 @@ function M.card(item, width, selected)
     end
   end
 
-  add_border("╭" .. string.rep("─", width - 2) .. "╮")
+  add_border(border_chars.top_left .. string.rep(border_chars.horizontal, width - 2) .. border_chars.top_right)
 
   local content_lines = {}
   if body and item_type == "DRAFT_ISSUE" then
@@ -564,7 +587,7 @@ function M.card(item, width, selected)
     add_line(content_line[1], content_line[2])
   end
 
-  add_border("╰" .. string.rep("─", width - 2) .. "╯")
+  add_border(border_chars.bottom_left .. string.rep(border_chars.horizontal, width - 2) .. border_chars.bottom_right)
   return lines, spans
 end
 
