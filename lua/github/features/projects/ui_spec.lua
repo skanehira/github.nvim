@@ -450,6 +450,23 @@ describe("projects ui", function()
       assert.equals("║", card[2]:sub(-3))
     end)
 
+    it("layers the card background, content and border above the column background", function()
+      for _, selected in ipairs({ false, true }) do
+        local _, spans = ui.card(full_issue(), 36, selected)
+        local bg = selected and "GitHubProjectsCardSelected" or "GitHubProjectsCard"
+        local border = selected and "GitHubProjectsCardSelectedBorder" or "GitHubProjectsCardBorder"
+        for _, span in ipairs(spans) do
+          if span[4] == bg then
+            assert.equals(1, span[5])
+          elseif span[4] == border then
+            assert.equals(10, span[5])
+          elseif span[4] == "GitHubProjectsCardTitle" then
+            assert.equals(2, span[5])
+          end
+        end
+      end
+    end)
+
     it("shows the remaining label and assignee counts as +N", function()
       local item = {
         type = "ISSUE",
@@ -551,6 +568,17 @@ describe("projects ui", function()
         { 0, "...", "GitHubProjectsColumn" },
         { 0, "+", "GitHubProjectsMeta" },
       }, spanned({ text }, spans))
+    end)
+
+    it("layers the header background and labels above the column background", function()
+      local _, spans = ui.column_header({ name = "Todo", count = 3, color = "BLUE" }, 36)
+      for _, span in ipairs(spans) do
+        if span[4] == "GitHubProjectsColumnHeader" then
+          assert.equals(1, span[5])
+        elseif span[4] == "GitHubProjectsColumn" then
+          assert.equals(2, span[5])
+        end
+      end
     end)
   end)
 

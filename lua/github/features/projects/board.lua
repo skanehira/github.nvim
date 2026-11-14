@@ -206,7 +206,7 @@ local function render_column(column, width, selected, selected_item_id)
   end
   if #column.items == 0 then
     lines[1] = ui.pad("—", width)
-    spans[1] = { { 0, 0, #"—", "GitHubProjectsEmpty" } }
+    spans[1] = { { 0, 0, #"—", "GitHubProjectsEmpty", 2 } }
   end
   return lines, spans, starts, heights
 end
@@ -257,7 +257,9 @@ local function compose_row(row, cells, cell_spans, bg)
     end
     line = line .. cell
     for _, span in ipairs(cell_spans[index] or {}) do
-      spans[#spans + 1] = { row, offsets[index] + span[2], offsets[index] + span[3], span[4] }
+      -- Preserve the span priority: the column background is 0 and the card
+      -- background, content and border must be drawn above it.
+      spans[#spans + 1] = { row, offsets[index] + span[2], offsets[index] + span[3], span[4], span[5] }
     end
   end
   return line, spans, offsets

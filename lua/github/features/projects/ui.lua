@@ -489,15 +489,16 @@ function M.card(item, width, selected)
     lines[#lines + 1] = line
     local row = #lines - 1
     -- Keep the background span between the side borders so the borders are
-    -- never overridden by a wider background span.
+    -- never overridden by a wider background span. The column background is
+    -- priority 0, the card background 1, the content 2 and the border 10.
     spans[#spans + 1] = { row, 0, 3, border, border_priority }
     spans[#spans + 1] = { row, #line - 3, #line, border, border_priority }
-    spans[#spans + 1] = { row, 3, #line - 3, bg }
+    spans[#spans + 1] = { row, 3, #line - 3, bg, 1 }
     for _, segment in ipairs(segments or {}) do
       local start = 4 + segment[1]
       local stop = start + segment[3]
       if stop > start then
-        spans[#spans + 1] = { row, start, stop, segment[2] }
+        spans[#spans + 1] = { row, start, stop, segment[2], 2 }
       end
     end
   end
@@ -602,23 +603,23 @@ function M.column_header(column, width, selected)
   line = pad_to(line, width)
   local spans = {}
   local bg = selected and "GitHubProjectsColumnSelected" or "GitHubProjectsColumnHeader"
-  spans[#spans + 1] = { 0, 0, #line, bg }
+  spans[#spans + 1] = { 0, 0, #line, bg, 1 }
   local group = M.color_group(column.color)
   if group then
-    spans[#spans + 1] = { 0, 0, #marker, group }
+    spans[#spans + 1] = { 0, 0, #marker, group, 2 }
   end
   local name_start = #marker + 1
   local name_end = math.min(name_start + #name, #left)
   if name_end > name_start then
-    spans[#spans + 1] = { 0, name_start, name_end, "GitHubProjectsColumn" }
+    spans[#spans + 1] = { 0, name_start, name_end, "GitHubProjectsColumn", 2 }
   end
   local count_start = name_end + 1
   local count_group = selected and "GitHubProjectsColumnSelected" or "GitHubProjectsMeta"
   if count_start < #left then
-    spans[#spans + 1] = { 0, count_start, #left, count_group }
+    spans[#spans + 1] = { 0, count_start, #left, count_group, 2 }
   end
   local plus_group = selected and "GitHubProjectsColumnSelected" or "GitHubProjectsMeta"
-  spans[#spans + 1] = { 0, #line - 1, #line, plus_group }
+  spans[#spans + 1] = { 0, #line - 1, #line, plus_group, 2 }
   return line, spans
 end
 

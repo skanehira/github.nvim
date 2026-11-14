@@ -73,7 +73,7 @@ local function highlights(buf, group)
     ipairs(vim.api.nvim_buf_get_extmarks(buf, vim.api.nvim_get_namespaces().github, 0, -1, { details = true }))
   do
     if not group or mark[4].hl_group == group then
-      values[#values + 1] = { mark[2], mark[3], mark[4].end_col, mark[4].hl_group }
+      values[#values + 1] = { mark[2], mark[3], mark[4].end_col, mark[4].hl_group, mark[4].priority }
     end
   end
   return values
@@ -393,6 +393,36 @@ describe("projects board", function()
     for _, lhs in ipairs(keys) do
       assert_mapping(buf, "n", lhs)
     end
+  end)
+
+  it("keeps the card highlights above the column background", function()
+    open_board(1)
+    respond(1, detail_response(1, "Board"))
+    respond(2, items_response(default_items()))
+    local _, buf = current_window("gh-projects-board")
+
+    local function assert_priority(group, expected)
+      local spans = highlights(buf, group)
+      assert.is_true(#spans > 0, "missing " .. group)
+      for _, span in ipairs(spans) do
+        assert.equals(expected, span[5], group .. " priority")
+      end
+    end
+
+    assert_priority("GitHubProjectsCardBorder", 10)
+    assert_priority("GitHubProjectsCardSelectedBorder", 10)
+    assert_priority("GitHubProjectsCard", 1)
+    assert_priority("GitHubProjectsCardSelected", 1)
+    assert_priority("GitHubProjectsCardTitle", 2)
+    assert_priority("GitHubProjectsColumnBg", 0)
+    assert_priority("GitHubProjectsColumn", 2)
+    local header_above = false
+    for _, span in ipairs(highlights(buf, "GitHubProjectsColumnHeader")) do
+      if span[5] == 1 then
+        header_above = true
+      end
+    end
+    assert.is_true(header_above, "missing header highlight above the column background")
   end)
 
   it("renders a single column when the project has no single-select field", function()

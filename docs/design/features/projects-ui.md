@@ -89,11 +89,12 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 ### ボードの描画
 
 - 1行目に`<owner> / <title>  ·  <items> items  ·  filter: <filter>`を表示する。フィルタが先頭ビュー由来なら`view: <name>  ·  filter: <filter>`とする。読み込み中は`Loading <fetched>/<total>...`、打ち切り時は`Showing <max_items> of <total>`、失敗時は`Error: <理由>`を表示する。行全体を`GitHubProjectsToolbar`で描画する。
-- 2行目に列ヘッダを表示する。`● <name> <count>`とし、選択肢の色を付ける。値なし列は`○ 値なし <count>`とする。右端に`+`を表示する。選択中の列ヘッダは`GitHubProjectsColumnSelected`で強調し、名前・件数・`+`を白で描く。列ヘッダ行全体の背景は`GitHubProjectsColumnHeader`とする。
+- 2行目に列ヘッダを表示する。`● <name> <count>`とし、選択肢の色を付ける。値なし列は`○ 値なし <count>`とする。右端に`+`を表示する。選択中の列ヘッダは`GitHubProjectsColumnSelected`で強調し、名前・件数・`+`を白で描く。列ヘッダ行全体の背景は`GitHubProjectsColumnHeader`とする。ヘッダの背景はpriority 1、ラベルは2、列背景は0にして、ヘッダが列背景に上書きされないようにする。
 - 列幅は設定`column_width`（既定36、20〜80）を最小幅として、表示領域に合わせて自動調整する。表示列数は`max(1, floor((inner_width + 1) / (column_width + 1)))`と列数の小さい方とし、実効列幅は`max(column_width, floor((inner_width - (表示列数 - 1)) / 表示列数))`とし、割り切れない余りは最後の表示列に加えて合計を`inner_width`にする。これにより右側に余白を残さない。列の区切りは半角スペース1セルとし、`│`は使わない。列数が表示幅を超える場合は横スクロールし、選択列が画面外に出るときは`first_col`を調整する。
 - 各列の本文は`GitHubProjectsColumnBg`の背景で塗り、列ごとに独立した縦の表示位置（先頭項目のindex）を持つ。選択中の列だけを`j`/`k`でスクロールし、他の列の位置は変えない。
 - 項目カードは角丸の枠線付きで、背景`GitHubProjectsCard`、枠線`GitHubProjectsCardBorder`を使う。カード幅は列幅に合わせ、高さは内容に応じて変動する。枠線は背景より高いextmark priorityで描き、上・左・右・下の全辺を同じ枠線色にする。
   - 上端は`╭─...─╮`、下端は`╰─...─╯`、内容行は`│ ... │`とする。選択中のカードは太い黄色の枠線にするため、上端`╔═...═╗`、下端`╚═...═╝`、内容行`║ ... ║`の二重線にする。
+  - 枠線はextmark priority 10、カード背景は1、内容は2、列背景は0で描き、列背景がカードの背景・内容・枠線を上書きしないようにする。
   - Issue: 先頭行は`◉ #<number> <title>`。`◉`はopenなら緑、closedなら紫。タイトルは省略せず、カード幅に合わせて必要な行数だけ折り返す。2行目以降は番号プレフィックスの表示幅だけインデントする。
   - PR: 先頭行は`⇄ #<number> <title>`。`⇄`はopenなら緑、mergedなら紫、closedなら赤。タイトルはIssueと同じく折り返す。
   - DraftIssue: 先頭行は`✎ <title>`。`✎`はグレー。タイトルは折り返す。
