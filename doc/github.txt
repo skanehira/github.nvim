@@ -464,8 +464,9 @@ PROJECT BOARD
     grows or there are no more pages. Fetching stops at `max_items`.
 
     Columns follow the options of the single-select field chosen by
-    `group_by`; items without a value go to the last `○ No <field>`
-    column (for example `○ No Status`).
+    `group_by`; items without a value go to the first `○ No <field>`
+    column (for example `○ No Status`). The column is hidden while it has
+    no items.
     Column headers show `● <name> <count>` in the option color and a `+`
     at the right edge. The board float border uses the same color as
     unselected cards. Issue and PR cards show `<repo> #<number>` with the

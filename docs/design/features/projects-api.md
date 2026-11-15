@@ -33,7 +33,7 @@ Projects v2のowner解決、Project一覧、Projectのフィールド・ビュ�
 - `fields(first:50)`から`__typename`、`id`、`name`、`dataType`、単一選択フィールドの`options {id, name, color}`を取得する。フィールドは先頭50件までとし、超えるProjectでは後続のフィールドを編集対象に表示しない。
 - `views(first:10)`から`number`、`name`、`layout`、`filter`を取得する。先頭10件までとし、最小の`number`のビューを先頭ビューとして、その`filter`を初期フィルタにする。`filter`がnullなら空のフィルタにする。ビューの切替・保存は対象外。
 - 列に使うフィールドは、`group_by`（既定`Status`）と名前が一致する単一選択フィールドとする。一致するものがなければ最初の単一選択フィールド、単一選択フィールドがなければ1列（`nil`）とする。
-- フィールドの並びはAPIの返却順とする。単一選択の選択肢順もAPIの返却順とし、値のない項目は末尾の値なし列に置く。
+- フィールドの並びはAPIの返却順とする。単一選択の選択肢順もAPIの返却順とし、値のない項目は先頭（左端）の値なし列に置く。
 - 編集可能なフィールドは`dataType`が`TEXT`、`NUMBER`、`DATE`、`SINGLE_SELECT`のカスタムフィールドとする。`TITLE`、`ASSIGNEES`、`LABELS`、`LINKED_PULL_REQUESTS`、`MILESTONE`、`REPOSITORY`、`REVIEWERS`、`PARENT_ISSUE`、`SUB_ISSUES_PROGRESS`、`CREATED`、`UPDATED`、`CLOSED`は除外する。`isIssueField`は実測で全フィールドfalseだったため判定に使わない。
 - 単一選択の選択肢は`id`、`name`、`color`を保持する。`id`は短い文字列であり、表示名と混同しない。
 

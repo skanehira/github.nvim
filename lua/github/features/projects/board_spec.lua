@@ -133,6 +133,7 @@ local function status_field()
       { id = "todo", name = "Todo", color = "GRAY" },
       { id = "doing", name = "In Progress", color = "BLUE" },
       { id = "done", name = "Done", color = "GREEN" },
+      { id = "blocked", name = "Blocked", color = "RED" },
     },
   }
 end
@@ -262,8 +263,18 @@ local function default_items()
       option_name = "Todo",
       content = draft_content("Draft idea", "draft body"),
     }),
-    item_node({ id = "R1", type = "REDACTED", content = vim.NIL }),
+    item_node({ id = "R1", type = "REDACTED", option = "blocked", option_name = "Blocked", content = vim.NIL }),
   }
+end
+
+local function items_with_no_value()
+  local items = default_items()
+  items[#items + 1] = item_node({
+    id = "N1",
+    type = "ISSUE",
+    content = issue_content(4, "Unsorted", empty_connection(), empty_connection()),
+  })
+  return items
 end
 
 local function items_response(nodes, total_count, has_next, cursor)
@@ -383,13 +394,12 @@ describe("projects board", function()
       state.columns[3].count,
       state.columns[4].count,
     })
-    assert.same({ "Todo", "In Progress", "Done", "No Status" }, {
+    assert.same({ "Todo", "In Progress", "Done", "Blocked" }, {
       state.columns[1].name,
       state.columns[2].name,
       state.columns[3].name,
       state.columns[4].name,
     })
-    assert.is_true(state.columns[4].no_value)
     assert.same({ column_index = 1, item_id = "I1" }, state.selected)
     assert.same({ 1, 1, 1, 1 }, state.offsets)
     assert.equals("", state.filter)
@@ -446,10 +456,59 @@ describe("projects board", function()
     stage.name = "Stage"
     detail.data.user.projectV2.fields.nodes = { stage }
     respond(1, detail)
-    respond(2, items_response(default_items()))
+    respond(2, items_response(items_with_no_value()))
     local _, buf = current_window("gh-projects-board")
 
-    assert.equals("No Stage", board.state(buf).columns[4].name)
+    assert.equals("No Stage", board.state(buf).columns[1].name)
+  end)
+
+  it("puts the no-value column at the left edge and selects its first item", function()
+    open_board(1)
+    respond(1, detail_response(1, "Board"))
+    respond(2, items_response(items_with_no_value()))
+    local win, buf = current_window("gh-projects-board")
+    local state = board.state(buf)
+
+    assert.same(
+      { "No Status", "Todo", "In Progress", "Done", "Blocked" },
+      vim.tbl_map(function(column)
+        return column.name
+      end, state.columns)
+    )
+    assert.is_true(state.columns[1].no_value)
+    assert.equals(" ○ No Status 1", list_lines(win)[2]:sub(1, #" ○ No Status 1"))
+    assert.same({ column_index = 1, item_id = "N1" }, state.selected)
+  end)
+
+  it("hides the no-value column when no item lacks a group value", function()
+    open_board(1)
+    respond(1, detail_response(1, "Board"))
+    respond(2, items_response(default_items()))
+    local win, buf = current_window("gh-projects-board")
+    local state = board.state(buf)
+
+    assert.same(
+      { "Todo", "In Progress", "Done", "Blocked" },
+      vim.tbl_map(function(column)
+        return column.name
+      end, state.columns)
+    )
+    assert.equals(" ● Todo 2", list_lines(win)[2]:sub(1, #" ● Todo 2"))
+    assert.is_nil(list_lines(win)[2]:find("No Status", 1, true))
+  end)
+
+  it("keeps the only column of a project without a single-select field even when it is empty", function()
+    open_board(1)
+    local detail = detail_response(1, "Board")
+    detail.data.user.projectV2.fields.nodes = { notes_field() }
+    respond(1, detail)
+    respond(2, items_response({}))
+    local win, buf = current_window("gh-projects-board")
+    local state = board.state(buf)
+
+    assert.equals(1, #state.columns)
+    assert.equals("No Status", state.columns[1].name)
+    assert.is_not_nil(list_lines(win)[2]:find("○ No Status 0", 1, true))
   end)
 
   it("renders a single column when the project has no single-select field", function()
@@ -859,7 +918,7 @@ describe("projects board", function()
           archived = true,
           content = issue_content(2, "Archived", empty_connection(), empty_connection()),
         }),
-        item_node({ id = "R1", type = "REDACTED", content = vim.NIL }),
+        item_node({ id = "R1", type = "REDACTED", option = "blocked", option_name = "Blocked", content = vim.NIL }),
       }, 2)
     )
     local win = current_window("gh-projects-board")
@@ -935,6 +994,95 @@ describe("projects board", function()
     assert.equals("Error: GitHub request failed (exit 1): HTTP 403", list_lines(win)[1])
     assert.equals(3, #board.state(buf).items)
     assert.same({ column_index = 1, item_id = "I3" }, board.state(buf).selected)
+  end)
+
+  it("keeps an empty column selected when the no-value column appears or disappears", function()
+    local function selected_name(buf)
+      local state = board.state(buf)
+      return state.columns[state.selected.column_index].name
+    end
+    local function filter_with(value)
+      key("ghs")
+      local _, input_buf = current_window("gh-projects-input")
+      vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, { value })
+      key("<Esc>")
+      key("<CR>")
+    end
+    local cases = {
+      { name = "r when it appears", before = default_items, after = items_with_no_value, keys = "ll", reload = "r" },
+      {
+        name = "r when it disappears",
+        before = items_with_no_value,
+        after = default_items,
+        keys = "lll",
+        reload = "r",
+      },
+      {
+        name = "ghs when it appears",
+        before = default_items,
+        after = items_with_no_value,
+        keys = "ll",
+        reload = "ghs",
+      },
+      {
+        name = "ghs when it disappears",
+        before = items_with_no_value,
+        after = default_items,
+        keys = "lll",
+        reload = "ghs",
+      },
+    }
+    for _, case in ipairs(cases) do
+      close_all()
+      calls, pending = {}, {}
+      open_board(1)
+      respond(1, detail_response(1, "Board"))
+      respond(2, items_response(case.before()))
+      local _, buf = current_window("gh-projects-board")
+      for char in case.keys:gmatch(".") do
+        key(char)
+      end
+      assert.same({ "Done", vim.NIL }, { selected_name(buf), board.state(buf).selected.item_id or vim.NIL }, case.name)
+
+      if case.reload == "r" then
+        key("r")
+      else
+        filter_with("is:open")
+      end
+      respond(3, items_response(case.after()))
+      assert.same({ "Done", vim.NIL }, { selected_name(buf), board.state(buf).selected.item_id or vim.NIL }, case.name)
+    end
+  end)
+
+  it("hides the no-value column when its last item is removed or gets a group value", function()
+    local function column_names(buf)
+      return vim.tbl_map(function(column)
+        return column.name
+      end, board.state(buf).columns)
+    end
+
+    open_board(1)
+    respond(1, detail_response(1, "Board"))
+    respond(2, items_response(items_with_no_value()))
+    local _, buf = current_window("gh-projects-board")
+    board.update_field(
+      buf,
+      "N1",
+      "status",
+      { kind = "single_select", value = "done", option_id = "done", name = "Done" }
+    )
+    assert.same({ "Todo", "In Progress", "Done", "Blocked" }, column_names(buf))
+    assert.same({ column_index = 3, item_id = "N1" }, board.state(buf).selected)
+
+    close_all()
+    calls, pending = {}, {}
+    open_board(1)
+    respond(1, detail_response(1, "Board"))
+    respond(2, items_response(items_with_no_value()))
+    _, buf = current_window("gh-projects-board")
+    board.remove_item(buf, "N1")
+    assert.same({ "Todo", "In Progress", "Done", "Blocked" }, column_names(buf))
+    assert.same({ column_index = 1, item_id = "I1" }, board.state(buf).selected)
   end)
 
   it("keeps the newest item result when an older response arrives while the board stays open", function()
@@ -1174,7 +1322,7 @@ describe("projects board", function()
     assert.same({ column_index = 4, item_id = "R1" }, board.state(buf).selected)
     assert.equals(4, board.state(buf).first_col)
     assert_card_cursor(win, buf, "[redacted]")
-    assert.is_not_nil(find_line(win, "○ No Status 1"))
+    assert.is_not_nil(find_line(win, "● Blocked 1"))
   end)
 
   it("renders the board that started the request when the items response arrives in another tab", function()
@@ -1365,19 +1513,76 @@ describe("projects board", function()
     end)
 
     it("clears the group field when an item is moved to the no-value column", function()
-      local _, buf = open_default_board()
+      open_board(1)
+      respond(1, detail_response(1, "Board"))
+      respond(2, items_response(items_with_no_value()))
+      local _, buf = current_window("gh-projects-board")
       key("l")
       key("ghm")
-      key("l")
-      key("l")
-      assert.same({ "I2", "R1" }, column_ids(buf, 4))
+      key("h")
+      assert.same({ "I1", "N1" }, column_ids(buf, 1))
 
       key("<CR>")
-      assert.same({ projectId = "P1", itemId = "I2", fieldId = "status" }, variables(3))
+      assert.same({ projectId = "P1", itemId = "I1", fieldId = "status" }, variables(3))
       assert.is_truthy(vim.json.decode(calls[3].opts.stdin).query:find("clearProjectV2ItemFieldValue", 1, true))
-      respond(3, field_cleared("I2"))
+      respond(3, field_cleared("I1"))
       assert.same({ MOVE_DONE }, notices)
       assert.equals(3, #calls)
+    end)
+
+    it("hides the no-value column when its last item is moved out and cannot move back into it", function()
+      open_board(1)
+      respond(1, detail_response(1, "Board"))
+      respond(2, items_response(items_with_no_value()))
+      local _, buf = current_window("gh-projects-board")
+      key("ghm")
+      key("l")
+      assert.same(
+        { "Todo", "In Progress", "Done", "Blocked" },
+        vim.tbl_map(function(column)
+          return column.name
+        end, board.state(buf).columns)
+      )
+      assert.same({ "I1", "I3", "N1" }, column_ids(buf, 1))
+      assert.same({ column_index = 1, item_id = "N1" }, board.state(buf).selected)
+
+      key("h")
+      assert.same({ column_index = 1, item_id = "N1" }, board.state(buf).selected)
+      assert.equals("Todo", board.state(buf).columns[1].name)
+
+      key("<CR>")
+      assert.same(
+        { projectId = "P1", itemId = "N1", fieldId = "status", value = { singleSelectOptionId = "todo" } },
+        variables(3)
+      )
+      respond(3, field_updated("N1"))
+      assert.same({ MOVE_DONE }, notices)
+      assert.same(
+        { "Todo", "In Progress", "Done", "Blocked" },
+        vim.tbl_map(function(column)
+          return column.name
+        end, board.state(buf).columns)
+      )
+    end)
+
+    it("shows the no-value column again when moving its last item out is cancelled", function()
+      open_board(1)
+      respond(1, detail_response(1, "Board"))
+      respond(2, items_response(items_with_no_value()))
+      local _, buf = current_window("gh-projects-board")
+      key("ghm")
+      key("l")
+      assert.equals("Todo", board.state(buf).columns[1].name)
+
+      key("q")
+      assert.same(
+        { "No Status", "Todo", "In Progress", "Done", "Blocked" },
+        vim.tbl_map(function(column)
+          return column.name
+        end, board.state(buf).columns)
+      )
+      assert.same({ column_index = 1, item_id = "N1" }, board.state(buf).selected)
+      assert.equals(2, #calls)
     end)
 
     it("reorders an item within its column with j and k and saves the position on <CR>", function()

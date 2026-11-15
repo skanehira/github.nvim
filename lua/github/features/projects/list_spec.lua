@@ -378,15 +378,8 @@ describe("projects list", function()
     local rendered = list_lines(win)
     assert.equals("acme / Org direct  ·  1 items  ·  filter: ", rendered[1])
     assert.is_not_nil(rendered[2]:find("● Todo 1", 1, true))
-    assert.is_not_nil(rendered[2]:find("○ No Status 0", 1, true))
+    assert.is_nil(rendered[2]:find("No Status", 1, true))
     assert.is_not_nil(table.concat(rendered, "\n"):find("◉ r #1", 1, true))
-    local has_empty = false
-    for _, line in ipairs(rendered) do
-      if line:find("—", 1, true) then
-        has_empty = true
-      end
-    end
-    assert.is_true(has_empty)
   end)
 
   it("shows an empty list, truncation and truncated titles", function()

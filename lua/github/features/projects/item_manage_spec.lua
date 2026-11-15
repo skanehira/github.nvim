@@ -125,6 +125,7 @@ local function status_field()
       { id = "todo", name = "Todo", color = "GRAY" },
       { id = "doing", name = "In Progress", color = "BLUE" },
       { id = "done", name = "Done", color = "GREEN" },
+      { id = "blocked", name = "Blocked", color = "RED" },
     },
   }
 end
@@ -259,7 +260,7 @@ local function default_items()
       option_name = "Todo",
       content = draft_content("Draft idea", "draft body"),
     }),
-    item_node({ id = "R1", type = "REDACTED", content = vim.NIL }),
+    item_node({ id = "R1", type = "REDACTED", option = "blocked", option_name = "Blocked", content = vim.NIL }),
   }
 end
 
@@ -668,8 +669,9 @@ describe("projects item manage", function()
 
     local state = board.state(board_buf)
     assert.equals(5, #state.items)
-    assert.same({ column_index = 4, item_id = "D1" }, state.selected)
-    assert.equals(2, state.columns[4].count)
+    assert.same({ column_index = 1, item_id = "D1" }, state.selected)
+    assert.equals("No Status", state.columns[1].name)
+    assert.equals(1, state.columns[1].count)
     assert.equals("line1\nline2", state.body_cache.D1)
     assert.equals(5, state.project.item_count)
     assert.same({ ADD_DRAFT_SUCCESS, vim.log.levels.INFO }, notices[1])
@@ -884,8 +886,9 @@ describe("projects item manage", function()
       }))
     )
     local state = board.state(board_buf)
-    assert.same({ column_index = 4, item_id = "I5" }, state.selected)
-    assert.equals(2, state.columns[4].count)
+    assert.same({ column_index = 1, item_id = "I5" }, state.selected)
+    assert.equals("No Status", state.columns[1].name)
+    assert.equals(1, state.columns[1].count)
     assert.equals(5, state.project.item_count)
     assert.same({
       ADD_GROUP_MISSING,
@@ -1013,8 +1016,7 @@ describe("projects item manage", function()
       )
       local state = board.state(board_buf)
       if case.expected then
-        local column = case.option == "doing" and 2
-          or (case.option == "done" and 3 or (case.option == "todo" and 1 or 4))
+        local column = ({ todo = 1, doing = 2, done = 3 })[case.option] or 1
         assert.same({ column_index = column, item_id = "F" .. index }, state.selected)
         assert.equals(5, #state.items)
         local notice = case.option == nil and ADD_GROUP_MISSING or ADD_SUCCESS

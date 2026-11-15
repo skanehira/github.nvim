@@ -88,24 +88,22 @@ local function column_key(column)
 end
 
 local function build_columns(state)
-  local columns = {}
   local group = state.group_field
+  local group_name = type(group) == "table" and type(group.name) == "string" and group.name or "Status"
+  local columns = { { key = nil, no_value = true, name = "No " .. group_name, items = {}, count = 0 } }
   if type(group) == "table" and type(group.options) == "table" then
     for _, option in ipairs(group.options) do
       columns[#columns + 1] = { key = option.id, name = option.name, color = option.color, items = {}, count = 0 }
     end
   end
-  local group_name = type(group) == "table" and type(group.name) == "string" and group.name or "Status"
-  columns[#columns + 1] = { key = nil, no_value = true, name = "No " .. group_name, items = {}, count = 0 }
   local by_key = {}
   for index, column in ipairs(columns) do
     if column.key then
       by_key[column.key] = index
     end
   end
-  local no_value = #columns
   for _, item in ipairs(state.items) do
-    local target = no_value
+    local target = 1
     if type(group) == "table" then
       local value = type(item.values) == "table" and item.values[group.id]
       if type(value) == "table" and value.kind == "single_select" then
@@ -117,6 +115,9 @@ local function build_columns(state)
     end
     columns[target].items[#columns[target].items + 1] = item
     columns[target].count = columns[target].count + 1
+  end
+  if columns[1].count == 0 and #columns > 1 then
+    table.remove(columns, 1)
   end
   return columns
 end
@@ -133,13 +134,19 @@ local function preserve_offsets(old_columns, old_offsets, columns)
   return offsets
 end
 
-local function reconcile_selection(state, item_id, previous_column, previous_index)
+local function reconcile_selection(state, item_id, previous_key, previous_column, previous_index)
   if item_id then
     for column_index, column in ipairs(state.columns) do
       if item_index(column, item_id) then
         state.selected = { column_index = column_index, item_id = item_id }
         return
       end
+    end
+  end
+  for column_index, column in ipairs(state.columns) do
+    if previous_key and column_key(column) == previous_key then
+      previous_column = column_index
+      break
     end
   end
   local column_index = math.max(1, math.min(previous_column or 1, #state.columns))
@@ -153,9 +160,10 @@ end
 
 local function rebuild(state, item_id, previous_column, previous_index)
   local old_columns, old_offsets = state.columns, state.offsets
+  local previous = old_columns and previous_column and old_columns[previous_column]
   state.columns = build_columns(state)
   state.offsets = preserve_offsets(old_columns, old_offsets, state.columns)
-  reconcile_selection(state, item_id, previous_column, previous_index)
+  reconcile_selection(state, item_id, previous and column_key(previous), previous_column, previous_index)
 end
 
 local function ui_item(item)
@@ -468,6 +476,7 @@ local function fetch_items(buf, kind, filter, prefetched)
       end
     end
     local before = column_size(state, state.selected.column_index)
+    local initial_page = first and kind == "initial"
     local dropped = false
     for _, item in ipairs(page.items) do
       if not item.archived then
@@ -491,7 +500,11 @@ local function fetch_items(buf, kind, filter, prefetched)
     local previous = state.selected
     local previous_column = previous.column_index
     local previous_index = previous.item_id and item_index(state.columns[previous_column], previous.item_id) or 1
-    rebuild(state, previous.item_id, previous_column, previous_index)
+    if initial_page then
+      rebuild(state, nil, nil, 1)
+    else
+      rebuild(state, previous.item_id, previous_column, previous_index)
+    end
     -- A page can add items to other columns only. Keep fetching while the
     -- selected column does not grow so pressing j at the bottom makes progress.
     if kind == "more" and column_size(state, state.selected.column_index) == before and state.pagination.has_next then
