@@ -89,7 +89,7 @@ The first form uses the current checkout's origin. `:GhGetAssociatedPullRequest`
 
 Projects v2 boards are shown in floating windows. Only github.com is supported; `gh` must be authenticated, and some Projects operations also require the `project` scope.
 
-Open the authenticated user's Project list, or a user's or organization's list:
+Open the Project list of the current repository's owner, or of a user or organization. Outside a github.com checkout, `:GitHub projects` opens the authenticated user's list:
 
 ```vim
 :GitHub projects
@@ -104,6 +104,8 @@ Open a board directly. A numeric first argument is a Project number:
 ```
 
 `@me` means the authenticated user. Projects have no `github://` URI.
+
+A loaded Project list is kept until Neovim exits, so opening the same owner again shows it at once. Press `r` in the list to fetch it again.
 
 | Key | Project list | Board | Field editor |
 | --- | --- | --- | --- |

@@ -30,7 +30,7 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 ### 共通の画面規則
 
 - floatはタブページごとのスタックで管理する。各画面は親ウィンドウを保持し、閉じたときは親→スタックの前の画面→元のウィンドウの順にフォーカスを戻す。
-- 同じ名前の画面が既にある場合は再利用し、内容を再取得する。ボードは`projects-board:<host>:<owner>:<number>`、一覧は`projects-list:<host>:<owner>`で識別する。同じProjectのボードを二重に開かない。
+- 同じ名前の画面が既にある場合は再利用し、内容を再取得する。ただし一覧は保持した一覧があれば再取得しない（projects-list「キャッシュ」）。ボードは`projects-board:<host>:<owner>:<number>`、一覧は`projects-list:<host>:<owner>`で識別する。同じProjectのボードを二重に開かない。
 - 子画面は親のボード/一覧が閉じたら閉じる。親が外部から閉じられた場合も子画面を閉じ、無効なwindowを操作しない。
 - バッファは`buftype=nofile`、`bufhidden=wipe`、`swapfile=false`。読み取り専用画面は`modifiable=false`、入力画面は`modifiable=true`。filetypeは一覧`gh-projects-list`、ボード`gh-projects-board`、フィールド編集`gh-projects-editor`、プレビュー`gh-projects-preview`、ヘルプ`gh-projects-help`、入力`gh-projects-input`とする。
 - 窓は`wrap=false`、`number=false`、`relativenumber=false`、`cursorline=false`、`signcolumn=no`、`foldcolumn=0`、`list=false`、`spell=false`、`scrolloff=0`とする。ボーダーと背景は既定の`FloatBorder`/`NormalFloat`を使う。ボードのfloatはボーダー色だけをissueカードの`GitHubProjectsCardBorder`に合わせるため、`FloatBorder:GitHubProjectsCardBorder`の`winhighlight`を設定する。`NormalFloat`は既定のまま、ボーダー形状は`rounded`。列・カード・ヘッダの背景は画面内のextmarkで表現する。
@@ -171,7 +171,7 @@ Projectsの一覧・ボード・フィールド編集・追加・削除・確認
 - リサイズ: `VimResized`で再配置し、選択と列ごとの位置を保つ。子画面も中央へ再配置する。
 - タブ: ボードを含むタブページが閉じられた場合、`TabClosed`でそのタブのスタックと画面状態を破棄し、以後の応答を無視する。
 - 親の終了: 親のボード/一覧が閉じたら子画面を閉じる。外部で親ウィンドウが閉じられた場合も子画面を閉じる。
-- 再利用: 同じ名前の画面は既存をフォーカスして再取得する。別タブの画面は操作しない。
+- 再利用: 同じ名前の画面は既存をフォーカスして再取得する。一覧は保持した一覧があれば再取得しない。別タブの画面は操作しない。
 - 入力: 挿入モードの`<CR>`/`<C-c>`、通常モードの`q`、空入力、入力中の失敗。
 - エラー: 読み込み・プレビュー・ブラウザ・クリップボード・mutationの失敗。成功と断定しない。
 - 並行: 古い応答、閉じた画面、別画面の更新。要求世代で破棄する。

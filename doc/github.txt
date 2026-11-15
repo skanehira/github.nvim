@@ -396,11 +396,13 @@ COMMANDS
 
 :GitHub projects [owner] [number]
     Open the Project list for owner, or the board of a Project when
-    number is given. Without owner, the authenticated user is used.
-    `@me` also means the authenticated user. When the first argument is
-    numeric, it is a Project number and owner is the authenticated user.
-    Projects work outside a Git checkout because they belong to a user
-    or an organization, not to a repository.
+    number is given. Without arguments, the list is for the owner of the
+    current Git checkout's origin; outside a checkout, or when origin is
+    not a github.com repository, the authenticated user is used. `@me`
+    means the authenticated user. When the first argument is numeric, it
+    is a Project number and owner is the authenticated user. Projects
+    work outside a Git checkout because they belong to a user or an
+    organization, not to a repository.
 >
     :GitHub projects
     :GitHub projects skanehira
@@ -426,15 +428,22 @@ PROJECT LIST
     r reloads the list; q or <Esc> closes the list and its board. A
     reload keeps the selection by Project number and clamps it when that
     Project is gone. A reload failure keeps the previous list and shows
-    the reason. Opening the same owner again reuses the list window and
-    reloads it.
+    the reason.
+
+    The last successfully loaded list of each owner is kept in memory
+    until Neovim exits, also after the list is closed. Opening the same
+    owner again shows the kept list at once without fetching it, and
+    reuses the list window when it is still open. Only r fetches the
+    list again and replaces the kept list; it is never refreshed
+    automatically. When no list has been loaded yet, for example after
+    the first fetch failed, opening the list fetches it.
 
 Project list:
     Key       Action
     ------------------------------------------------------------------------
     j / k     Select the previous / next Project
     <CR>      Open the selected Project board
-    r         Reload the list
+    r         Reload the list and replace the kept list
     q / <Esc> Close the list
 
 PROJECT BOARD
@@ -781,7 +790,8 @@ COMMANDS                                                    *github-commands*
 <
 :GitHub projects [owner] [number]
     Open the Project list for owner, or the board of a Project. Without
-    owner, the authenticated user is used. `@me` also means the
+    arguments, the owner of the current checkout's origin is used, or the
+    authenticated user outside a github.com checkout. `@me` means the
     authenticated user. A numeric first argument is a Project number.
     Projects are shown in float windows and have no github:// URI; see
     |github-projects|.

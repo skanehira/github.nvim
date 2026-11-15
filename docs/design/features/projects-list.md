@@ -6,31 +6,40 @@
 
 ## 何を作るか
 
-UC-014の利用者操作を実現する。対象規則はBR-054〜BR-062。一覧とボードのfloat UIはprojects-ui、APIはprojects-api、ボードの閲覧はprojects-boardに従う。
+UC-014の利用者操作を実現する。対象規則はBR-054〜BR-062とBR-097。一覧とボードのfloat UIはprojects-ui、APIはprojects-api、ボードの閲覧はprojects-boardに従う。
 
 ## 入出力と振る舞い
 
 ### コマンド
 
-- `:GitHub projects`は認証済みユーザーのProject一覧をfloatで開く。
+- `:GitHub projects`は現在のディレクトリのGitリポジトリのoriginからownerを読み、そのユーザーまたはOrgのProject一覧をfloatで開く。Gitリポジトリ外、originが無い、またはoriginがgithub.comでない場合は、認証済みユーザーの一覧を開く。例: originが`git@github.com:acme/r.git`なら`acme`の一覧を開く。
 - `:GitHub projects <owner>`は指定したユーザーまたはOrgのProject一覧をfloatで開く。`@me`は認証済みユーザーとして扱う。
 - `:GitHub projects <owner> <number>`は一覧を経由せずに指定Projectのボードをfloatで開く。閉じたProjectを指定した場合はボードを開かず、Projectが閉じている旨を通知する。
 - `:GitHub projects <number>`は認証済みユーザーの指定番号のボードを開く。第1引数が全て数字なら番号として扱う。閉じたProjectの場合はボードを開かず、閉じている旨を通知する。
 - `:GitHub projects @me <number>`も認証済みユーザーのボードを開く。
 - 引数が多すぎる場合、ownerが空・空白・`/`を含む場合、ownerが英数字とハイフン以外の場合、番号が正の整数でない場合は`Usage: GitHub projects [owner] [number]`を表示し、画面を開かない。`@me`はこの検証の対象外とする。
-- Projectsはowner単位の対象であり、Gitリポジトリのoriginを必要としない。cwdがGit checkout外でも動作する。
-- コマンドは`require("github.features.projects.list").open({owner, number, parent_win})`へ渡す。一覧・ボードの再利用と要求世代は各画面が管理し、コマンド側のbuffer世代ガードは使わない。
+- Projectsはowner単位の対象である。originは引数なしの一覧でownerを決めるためだけに読み、どの形式もcwdがGit checkout外で動作する。
+- コマンドは`require("github.features.projects.list").open({owner, number, from_repository, parent_win})`へ渡す。`from_repository`は引数なしのときだけ`{cwd, run}`を渡し、一覧が`core/repo.lua`の`resolve`でoriginのownerを読む。一覧・ボードの再利用と要求世代は各画面が管理し、コマンド側のbuffer世代ガードは使わない。
 
 ### 一覧の状態
 
 - 一覧は`{owner, type, projects, selected, loading, error, generation, truncated}`を保持する。
-- 開くときはownerをRESTで解決し、種別を確定してからProject一覧を取得する。owner省略時はREST `user`、指定時は`users/{login}`を使う。
+- 開くときはownerをRESTで解決し、種別を確定してからProject一覧を取得する。ownerが無い場合と`@me`はREST `user`、指定時とoriginから読んだ場合は`users/{login}`を使う。
 - 読み込み中は一覧のヘッダに`Loading projects...`を表示する。owner解決に失敗した場合はfloatを開かず、理由を通知する。
 - 取得結果は`closed`が偽のProjectだけを最大100件表示する。各Projectは`#<number> <title>  <items> items  <public|private>`の形式で表示し、タイトルは表示幅で切り詰める。開いているProjectが100件に達し、まだ続きがある場合は`Showing 100 projects`を表示する。
 - 0件は`No open projects`を表示する。空の一覧でもfloatを開き、`r`で再取得できる。
 - 初期選択は先頭のProjectとする。`j`/`k`で選択を移動し、端では移動しない。カーソルは選択行に置く。
-- `r`は同じownerで再取得する。取得開始時に選択を解除せず、成功時はProject番号で選択を維持する。存在しなければ同じ位置へclampし、0件なら選択を外す。失敗時は直前の成功内容を保持し、ヘッダに理由を表示する。
+- `r`は同じownerで再取得する。取得開始時に選択を解除せず、成功時はProject番号で選択を維持する。存在しなければ同じ位置へclampし、0件なら選択を外す。成功時はキャッシュも置き換える。失敗時は直前の成功内容とキャッシュを保持し、ヘッダに理由を表示する。
 - `q`/`<Esc>`で一覧を閉じる。子のボードが開いている場合はボードも閉じ、元のウィンドウへ戻る。
+
+### キャッシュ
+
+- owner解決の結果と、Project一覧の最後の成功結果（Projectの行と`Showing 100 projects`の表示）を、一覧を閉じてもNeovimの終了までメモリに保持する。期限は設けず、ディスクには保存しない。保持は共通の`core/cache.lua`を使う。
+- owner解決のキャッシュは、ホストと入力したownerで識別し、大文字小文字を区別しない。ownerが無い場合と`@me`は同じキーにする。一覧のキャッシュは、ホストとowner解決が返したログインで識別する。例: `:GitHub projects Acme`と`:GitHub projects acme`は同じキャッシュを使う。
+- 一覧を開くとき、そのownerの一覧のキャッシュがあれば取得せずにすぐ表示し、選択は先頭にする。キャッシュが無い場合（初めて開く、または初回の取得が失敗した後）は取得する。
+- キャッシュを取得し直すのは一覧の`r`だけとする。自動の再取得はしない。
+- キャッシュはタブページをまたいで共有する。ボードの内容はキャッシュしない。
+- 引数なしの一覧は、キャッシュがあっても開くたびにoriginを読む。originの読み取りはローカルのgitだけで完結し、GitHubへの通信は発生しない。
 
 ### ボードを開く
 
@@ -54,7 +63,7 @@ UC-014の利用者操作を実現する。対象規則はBR-054〜BR-062。一�
 - 一覧は幅70%・高さ70%、ボードは幅90%・高さ90%を基本とし、projects-uiの`target_size`と中央配置を使う。
 - `VimResized`で一覧・ボードを再配置する。ボードは表示列数を再計算し、選択と列ごとの位置を保つ。
 - 一覧は`projects-list:<host>:<owner>`、ボードは`projects-board:<host>:<owner>:<number>`で識別し、タブページごとに管理する。別タブの画面は操作しない。
-- 同じownerの一覧を再度開くと既存を再利用して再取得する。別ownerの一覧は別画面とする。
+- 同じownerの一覧を再度開くと既存を再利用する。キャッシュがあれば再取得せず、無ければ再取得する。別ownerの一覧は別画面とする。
 
 ## API
 
@@ -65,19 +74,20 @@ UC-014の利用者操作を実現する。対象規則はBR-054〜BR-062。一�
 | 処理 | 層 | 実装先ファイル |
 | --- | --- | --- |
 | `:GitHub projects`の引数解析と画面起動 | 公開入口 | `lua/github/features/command.lua` |
-| Project一覧の状態・取得・表示・再利用 | 機能 | `lua/github/features/projects/list.lua` |
+| Project一覧の状態・取得・表示・再利用・キャッシュ、originのowner読み取り | 機能 | `lua/github/features/projects/list.lua` |
 | Project一覧の振る舞いの検証 | テスト | `lua/github/features/projects/list_spec.lua` |
 
 owner解決・Project一覧・Project詳細はprojects-api、ボードの描画はprojects-board、float/UIはprojects-uiの子が実装する。本issueは`command.lua`、`list.lua`、`list_spec.lua`を所有する。一覧はProjects API層からモデルを受け取り、ghを直接呼ばない。テストではfake ghと`core/float.lua`を使い、実GitHubの書込みを行わない。`doc/github.txt`の`:GitHub projects`とキーの説明は実装issueで更新する。
 
 ## エッジケースの決定
 
-- 引数: 0個、ownerのみ、owner+番号、番号のみ、`@me`、owner+番号+余分な引数、空文字、空白、`/`を含むowner、0・負数・小数の番号。
+- 引数: 0個（originのowner、Git checkout外、originが無い、originがgithub.com以外）、ownerのみ、owner+番号、番号のみ、`@me`、owner+番号+余分な引数、空文字、空白、`/`を含むowner、0・負数・小数の番号。
 - owner: ユーザー、Org、存在しない、アクセスできない、大文字小文字。
 - Project: 0件、1件、100件、100件超、閉じたProject、存在しない、アクセスできない。
 - 準備: gh未導入、未認証、`project`スコープ不足、ネットワーク障害。
 - 取得: 一覧の初回失敗、再取得失敗、ボードの初回失敗、項目の途中失敗、打ち切り。
 - 再利用: 同じ一覧、同じボード、別owner、別Project、別タブ。
+- キャッシュ: 閉じた後の再表示、`r`の成功・失敗、初回失敗後の再表示、打ち切り表示の保持、別タブでの再表示。
 - 終了: 一覧の`q`、ボードの`q`、親ウィンドウの終了、子画面の終了。
 - サイズ: 小さい画面、リサイズ、列幅が内側幅を超える場合。
 - 並行: 古い応答、閉じた画面、別画面の更新。
@@ -86,16 +96,17 @@ owner解決・Project一覧・Project詳細はprojects-api、ボードの描画�
 
 | 受け入れ基準 (docs/design/USECASES.md) | レベル |
 | --- | --- |
-| （US-020）ownerを省略して`:GitHub projects`を実行すると、認証済みユーザーの開いているProjectがfloatウィンドウに一覧表示され、各Projectの番号・タイトル・項目数・公開範囲が表示される。 | 結合 |
+| （US-020）ownerを省略して`:GitHub projects`を実行すると、現在のGitリポジトリのoriginのownerの開いているProjectがfloatウィンドウに一覧表示され、各Projectの番号・タイトル・項目数・公開範囲が表示される。Gitリポジトリ外、またはoriginがgithub.comでない場合は、認証済みユーザーの一覧が表示される。 | 結合 |
 | （US-020）ownerにOrgのログインを指定して`:GitHub projects <owner>`を実行すると、そのOrgの開いているProjectがfloatウィンドウに一覧表示される。 | 結合 |
 | （US-020）Project一覧で`j`/`k`でProjectを選び`<CR>`を実行すると、そのProjectのボードがfloatウィンドウに開き、単一選択フィールドの選択肢ごとの列と項目が表示される。 | 結合 |
 | （US-020）`:GitHub projects <owner> <number>`を実行すると、一覧を経由せずにそのProjectのボードがfloatウィンドウに開く。 | 結合 |
 | （US-020）対象のProjectが0件のときは一覧に0件であることが表示され、Projectが見つからない、またはアクセスできないときは理由が表示されてボードを開かない。 | 結合 |
 | （US-020）ghが未導入または未認証のときに`:GitHub projects`を実行すると、不足する準備の案内が表示され、Neovimの編集を継続できる。 | 結合 |
-| （US-020）同じownerのProject一覧、または同じProjectのボードを再度開くと、既存のfloatウィンドウが再利用されて再取得される。 | 結合 |
+| （US-020）同じProjectのボードを再度開くと、既存のfloatウィンドウが再利用されて再取得される。 | 結合 |
+| （US-020）一度取得したownerのProject一覧を閉じてから再度開くと、取得を待たずに前回の一覧が表示される。一覧で`r`を押すと取得し直し、次に開いたときは取り直した一覧が表示される。 | 結合 |
 | （US-020）ボードで`q`または`<Esc>`を実行するとボードが閉じて一覧または元のウィンドウへ戻り、一覧で`q`または`<Esc>`を実行すると一覧が閉じて元のウィンドウへ戻る。 | 結合 |
 | （US-020）ボード表示中にエディタのサイズが変わると、floatウィンドウが画面内に収まるように再配置される。 | 結合 |
 | （US-020）取得に失敗したときは理由が表示され、再取得の失敗では直前の成功内容が保持される。 | 結合 |
 | （US-020）ボードを閉じた後に取得応答が届いても、閉じた画面は再作成されず、他の画面も更新されない。 | 結合 |
 
-受け入れ基準に加え、引数解析（ownerのみ・番号のみ・`@me`・不正値）、ownerのユーザー/Org解決、閉じたProjectの除外、100件超の打ち切り、一覧の再取得時の選択維持、Git checkout外での動作、別タブの画面を操作しないことを結合テストする。
+受け入れ基準に加え、引数解析（ownerのみ・番号のみ・`@me`・不正値）、ownerのユーザー/Org解決、閉じたProjectの除外、100件超の打ち切り、一覧の再取得時の選択維持、Git checkout外での動作、別タブの画面を操作しないこと、開いている同じownerの一覧を再取得せずに再利用すること、`r`の失敗でキャッシュが残ること、初回の取得が失敗した後は再度開くと取得することを結合テストする。

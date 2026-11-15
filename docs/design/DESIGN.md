@@ -74,7 +74,7 @@ PR一覧はIssue一覧の検索・バッファ・描画・キーマップ・非�
 | `github://owner/repo/issues/<number>/assignees`、`/labels` | 担当者・ラベル編集。 |
 | `github://owner/repo/issues/<number>/comments`、`/comments/new`、`/comments/<comment-id>` | コメント一覧・投稿・編集。comment-idは数値database ID。 |
 | `:GitHub related-pr [owner/repo] <commit>` | 関連PR先頭1件のURLを表示する。省略時はGit originを使う。既存`:GhGetAssociatedPullRequest <commit>` / `<owner> <repo> <commit>`も互換用に残す。 |
-| `:GitHub projects [owner]` | Project一覧をfloatウィンドウで開く。owner省略時は認証済みユーザー、指定時はユーザーまたはOrg。`@me`は認証済みユーザーとして扱う。 |
+| `:GitHub projects [owner]` | Project一覧をfloatウィンドウで開く。owner省略時は現在のGitリポジトリのoriginのowner、originからownerを特定できない場合は認証済みユーザー。指定時はユーザーまたはOrg。`@me`は認証済みユーザーとして扱う。 |
 | `:GitHub projects [owner] <number>` | 指定Projectのボードをfloatウィンドウで開く。owner省略時は認証済みユーザー。第1引数が数字のみなら番号として扱い、ownerは認証済みユーザーとする。 |
 | `require('github').setup(opts)` | `nil`または空テーブル、および`projects`設定（`group_by`、`column_width`、`max_items`）を受け付ける。他のキーは拒否する。詳細はsetup設計を参照。 |
 
@@ -101,7 +101,7 @@ Projectsのキーマップは、一覧が`j`/`k`/`<CR>`/`r`/`q`/`<Esc>`、ボー
 - 同じ項目の同時編集はGitHubが最後に受け付けた保存を正とする。各更新は対象項目だけを送り、別項目を巻き戻さない。
 - ActionsのYAML依存・レビューのworktree/永続状態はIssue機能に要求しない。ghや認証はGitHub操作の時点で確認する。
 - Projectsはfloatウィンドウの画面とし、`github://` URIとHTTPS入口を持たない。`:GitHub projects [owner]`と`:GitHub projects [owner] <number>`を入口にする。
-- floatは`core/float.lua`で開き、タブページごとのスタックで管理する。各floatは親ウィンドウを保持し、閉じたときは親→スタックの前の画面→元のウィンドウの順にフォーカスを戻す。同じ名前の画面は再利用して再取得する。バッファは`buftype=nofile`、`bufhidden=wipe`、`swapfile=false`とし、読み取り専用画面は`modifiable=false`にする。`VimResized`で画面比率と中央配置を再計算して再描画する。
+- floatは`core/float.lua`で開き、タブページごとのスタックで管理する。各floatは親ウィンドウを保持し、閉じたときは親→スタックの前の画面→元のウィンドウの順にフォーカスを戻す。同じ名前の画面は再利用して再取得する。ただしProject一覧は保持した一覧があれば再取得しない（projects-list「キャッシュ」）。バッファは`buftype=nofile`、`bufhidden=wipe`、`swapfile=false`とし、読み取り専用画面は`modifiable=false`にする。`VimResized`で画面比率と中央配置を再計算して再描画する。
 - ボードは列幅を固定し、表示できる列だけを描画する。`h`/`l`で選択列を移動し、画面外へ出るときは表示列をスクロールする。列ごとに縦の表示位置を持ち、`j`/`k`では選択列だけをスクロールする。選択項目の先頭行にカーソルを置き、列ヘッダと項目をextmarkで強調する。
 - Projectsの列は`group_by`（既定Status）と名前が一致する単一選択フィールドの選択肢順とし、値のない項目は末尾の値なし列に置く。`group_by`が見つからなければ最初の単一選択フィールドを使い、単一選択フィールドがなければ1列（`nil`）にする。項目は100件/pageで取得し、`query`フィルタ、`orderBy POSITION`、`archivedStates NOT_ARCHIVED`を指定する。`max_items`で打ち切った場合は画面に示す。フィルタの0件は成功結果として扱い、取得エラーと区別する。
 - ProjectsのフィルタはGitHubのProjectフィルタ文字列をそのまま使う。初期条件は`number`が最小のビューのフィルタとし、`ghs`で変更できる。空のフィルタは全件、変更なしは再取得しない。
