@@ -53,9 +53,14 @@ function M.setup(opts)
       if not parsed then
         return notify("Usage: GitHub projects [owner] [number]", vim.log.levels.ERROR)
       end
+      local from_repository
+      if parsed.owner == nil and parsed.number == nil then
+        from_repository = { cwd = get_cwd(), run = opts.run }
+      end
       return require("github.features.projects.list").open({
         owner = parsed.owner,
         number = parsed.number,
+        from_repository = from_repository,
         parent_win = vim.api.nvim_get_current_win(),
       })
     end

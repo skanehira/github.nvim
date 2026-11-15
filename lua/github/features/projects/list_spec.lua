@@ -255,8 +255,30 @@ describe("projects list", function()
     config.set({ group_by = "Status", column_width = 36, max_items = 1000 })
   end)
 
-  it("opens the authenticated user's projects with number, title, item count and visibility", function()
+  it("opens the current repository owner's projects when no owner is given", function()
+    origin = "git@github.com:acme/r.git"
     vim.cmd("GitHub projects")
+    assert.same({ "git", "rev-parse", "--show-toplevel" }, git_calls[1].argv)
+    assert.equals(vim.fn.getcwd(), git_calls[1].opts.cwd)
+    assert.same({ "gh", "api", "--hostname", "github.com", "--method", "GET", "users/acme" }, calls[1].argv)
+    respond(1, { login = "acme", type = "Organization" })
+    respond(2, org_projects_page({ project_node(4, "Org project", 2, false) }))
+    assert.same({
+      "Projects for acme (organization)  ·  1 open",
+      "#4 Org project  2 items  private",
+    }, list_lines(current_window("gh-projects-list")))
+  end)
+
+  it("opens the authenticated user's projects when the origin is not a github.com repository", function()
+    origin = "https://gitlab.com/acme/r.git"
+    vim.cmd("GitHub projects")
+    assert.equals(2, #git_calls)
+    assert.same({ "gh", "api", "--hostname", "github.com", "--method", "GET", "user" }, calls[1].argv)
+  end)
+
+  it("shows the authenticated user's project rows outside a repository", function()
+    vim.cmd("GitHub projects")
+    assert.equals(1, #git_calls)
     assert.equals(0, #float_windows())
     assert.equals(1, #calls)
     assert.same({ "gh", "api", "--hostname", "github.com", "--method", "GET", "user" }, calls[1].argv)

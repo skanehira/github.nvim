@@ -222,28 +222,45 @@ local function attached(tab, parent)
   return vim.api.nvim_win_get_tabpage(parent) == tab
 end
 
+local function requested_owner(opts, callback)
+  local source = opts.from_repository
+  if not source then
+    return callback(opts.owner)
+  end
+  -- Not being in a github.com checkout is not an error here: the list falls
+  -- back to the authenticated user, as it did before origin was consulted.
+  require("github.core.repo").resolve(source.cwd, source.run, function(target)
+    callback(target and target.owner or nil)
+  end)
+end
+
 function M.open(opts)
   opts = opts or {}
   local tab = vim.api.nvim_get_current_tabpage()
   local parent = opts.parent_win or vim.api.nvim_get_current_win()
-  local api = require("github.features.projects.api").new()
-  api.resolve_owner({ host = HOST, owner = opts.owner }, function(resolved, err)
+  requested_owner(opts, function(owner)
     if not attached(tab, parent) then
       return
     end
-    if not resolved then
-      notify_error(reason(err))
-      return
-    end
-    if opts.number then
-      require("github.features.projects.board").open({
-        owner = resolved,
-        number = opts.number,
-        parent_win = parent,
-      })
-      return
-    end
-    open_list(resolved, parent)
+    local api = require("github.features.projects.api").new()
+    api.resolve_owner({ host = HOST, owner = owner }, function(resolved, err)
+      if not attached(tab, parent) then
+        return
+      end
+      if not resolved then
+        notify_error(reason(err))
+        return
+      end
+      if opts.number then
+        require("github.features.projects.board").open({
+          owner = resolved,
+          number = opts.number,
+          parent_win = parent,
+        })
+        return
+      end
+      open_list(resolved, parent)
+    end)
   end)
 end
 
