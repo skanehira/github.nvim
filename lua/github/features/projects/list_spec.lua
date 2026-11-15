@@ -2,15 +2,22 @@ local process = require("github.core.process")
 local config = require("github.core.config")
 
 local old_run, old_notify
-local calls, pending, notices
+local calls, pending, notices, git_calls, origin
 
 local function fake_gh()
-  calls, pending, notices = {}, {}, {}
+  calls, pending, notices, git_calls, origin = {}, {}, {}, {}, nil
   old_run, old_notify = process.run, vim.notify
   vim.notify = function(message, level)
     notices[#notices + 1] = { message, level }
   end
   process.run = function(argv, opts, callback)
+    if argv[1] == "git" then
+      git_calls[#git_calls + 1] = { argv = argv, opts = opts }
+      if not origin then
+        return callback({ code = 128, stdout = "", stderr = "fatal: not a git repository" })
+      end
+      return callback({ code = 0, stdout = argv[2] == "rev-parse" and "/checkout\n" or origin .. "\n" })
+    end
     calls[#calls + 1] = { argv = argv, opts = opts }
     pending[#pending + 1] = callback
   end
