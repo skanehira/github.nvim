@@ -117,12 +117,12 @@ Open a board directly. A numeric first argument is a Project number:
 | `ghe` | — | Edit fields | — |
 | `ghn` | — | Add existing Issue/PR or draft | — |
 | `ghd` | — | Delete item from Project | — |
-| `<C-h>` / `<C-l>` | — | Start moving the item to the previous / next column | — |
+| `ghm` | — | Start the move mode for the item | — |
 | `r` | Reload | Reload | — |
 | `?` | — | Key help | — |
 | `q` / `<Esc>` | Close | Close board and children | Close editor |
 
-While an item is being moved, `<C-h>` / `<C-l>` move it to the previous / next column, `j` / `k` move it down / up within the column, `<CR>` saves the move and shows `move done`, and `q` / `<Esc>` cancel it and put the item back. Other board keys are rejected until the move is saved or cancelled. A column change updates the group field (the no-value column clears it); a position change is sent only when `j` / `k` changed the order within the column. A failed save keeps the move so `<CR>` can retry.
+In the move mode, which the board header shows, `h` / `l` move the item to the previous / next column, `j` / `k` move it down / up within the column, `<CR>` saves the move and shows `move done`, and `q` / `<Esc>` cancel it and put the item back. Other board keys are rejected until the move is saved or cancelled. A column change updates the group field (the no-value column clears it); a position change is sent only when `j` / `k` changed the order within the column. A failed save keeps the move so `<CR>` can retry.
 
 Single-select options use `j` / `k` and `<CR>` to apply, with a final `値を解除` entry to clear the value. Text, number, and date fields use a one-line input: `<CR>` applies, `<C-c>` cancels, and an empty input clears the field. Number and date values are validated before sending.
 
