@@ -28,11 +28,11 @@ local HELP_ROWS = {
   { "ghe", "ボード: フィールドを編集" },
   { "ghn", "ボード: 項目を追加" },
   { "ghd", "ボード: 項目を削除" },
-  { "<C-h>", "ボード: 項目を前の列へ移動 (移動を開始)" },
-  { "<C-l>", "ボード: 項目を次の列へ移動 (移動を開始)" },
-  { "j/k", "移動中: 列の中で下/上へ移動" },
-  { "<CR>", "移動中: 移動を確定" },
-  { "q/<Esc>", "移動中: 移動を中止して元に戻す" },
+  { "ghm", "ボード: 移動モードを開始" },
+  { "h/l", "移動モード: 前/次の列へ移動" },
+  { "j/k", "移動モード: 列の中で下/上へ移動" },
+  { "<CR>", "移動モード: 移動を確定" },
+  { "q/<Esc>", "移動モード: 移動を中止して元に戻す" },
   { "r", "一覧・ボード: 再取得" },
   { "?", "ヘルプを表示" },
   { "y", "確認: 削除する" },
@@ -304,6 +304,9 @@ local function render(buf)
     parts[#parts + 1] = "view: " .. state.view
   end
   parts[#parts + 1] = "filter: " .. (state.filter or "")
+  if state.moving then
+    parts[#parts + 1] = "moving: h/l column, j/k order, <CR> save, q cancel"
+  end
   local header, header_spans = ui.header({
     text = ui.join(parts),
     loading = loading,
@@ -667,7 +670,7 @@ local function shift_order(buf, delta)
   render(buf)
 end
 
-local function start_move(buf, delta)
+local function start_move(buf)
   local state = states[buf]
   local item = M.selected_item(buf)
   if not state or not item then
@@ -688,7 +691,7 @@ local function start_move(buf, delta)
       column_key = state.columns[state.selected.column_index].key,
     },
   }
-  shift_column(buf, delta)
+  render(buf)
 end
 
 -- GitHub keeps the item where it was unless a position is sent, and puts it
@@ -995,11 +998,8 @@ local function setup_screen(buf, name)
   ui.buffer(buf, { readonly = true, filetype = "gh-projects-board" })
   local maps = {
     n = {
-      ["<C-h>"] = function()
-        start_move(buf, -vim.v.count1)
-      end,
-      ["<C-l>"] = function()
-        start_move(buf, vim.v.count1)
+      ghm = function()
+        start_move(buf)
       end,
       h = function()
         move_column(buf, state_column(buf) - vim.v.count1)
@@ -1067,10 +1067,10 @@ local function setup_screen(buf, name)
     },
   }
   local move_actions = {
-    ["<C-h>"] = function()
+    h = function()
       shift_column(buf, -vim.v.count1)
     end,
-    ["<C-l>"] = function()
+    l = function()
       shift_column(buf, vim.v.count1)
     end,
     j = function()
