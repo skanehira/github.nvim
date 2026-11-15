@@ -589,11 +589,11 @@ describe("projects ui", function()
         { 0, "+", "GitHubProjectsColumnSelected" },
       }, spanned({ text }, spans))
 
-      text, spans = ui.column_header({ no_value = true, count = 2 }, 36)
-      assert.equals(" ○ 値なし 2" .. string.rep(" ", 22) .. " + ", text)
+      text, spans = ui.column_header({ no_value = true, name = "No Status", count = 2 }, 36)
+      assert.equals(" ○ No Status 2" .. string.rep(" ", 19) .. " + ", text)
       assert.same({
         { 0, text, "GitHubProjectsColumnHeader" },
-        { 0, "値なし", "GitHubProjectsColumn" },
+        { 0, "No Status", "GitHubProjectsColumn" },
         { 0, "2", "GitHubProjectsMeta" },
         { 0, "+", "GitHubProjectsMeta" },
       }, spanned({ text }, spans))

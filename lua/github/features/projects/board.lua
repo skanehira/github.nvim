@@ -95,7 +95,8 @@ local function build_columns(state)
       columns[#columns + 1] = { key = option.id, name = option.name, color = option.color, items = {}, count = 0 }
     end
   end
-  columns[#columns + 1] = { key = nil, no_value = true, name = "値なし", items = {}, count = 0 }
+  local group_name = type(group) == "table" and type(group.name) == "string" and group.name or "Status"
+  columns[#columns + 1] = { key = nil, no_value = true, name = "No " .. group_name, items = {}, count = 0 }
   local by_key = {}
   for index, column in ipairs(columns) do
     if column.key then

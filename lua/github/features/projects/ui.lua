@@ -623,7 +623,7 @@ end
 
 function M.column_header(column, width, selected)
   local marker = column.no_value and "○" or "●"
-  local name = column.no_value and "値なし" or sanitize(column.name)
+  local name = sanitize(column.name)
   local count = tostring(column.count or 0)
   local plus = "+"
   local available = math.max(1, width - display_width(plus) - 2)

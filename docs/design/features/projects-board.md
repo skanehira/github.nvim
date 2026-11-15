@@ -13,7 +13,7 @@ UC-015とUC-019の利用者操作を実現する。対象規則はBR-063〜BR-07
 ### ボードの状態
 
 - ボードは`{project, fields, group_field, columns, items, view, filter, selected, offsets, first_col, visible, loading, error, generation, truncated, pagination, body_cache, moving}`を保持する。
-- `columns`はグループフィールドの選択肢順に作り、値のない項目を末尾の値なし列に置く。グループフィールドの値が現在の選択肢にない項目も値なし列に置く。各列は`{key, name, color, items, count}`を持つ。値なし列は`{key=nil, no_value=true, name="値なし", items, count}`とする。単一選択フィールドがない場合は1列（`key=nil`）とする。
+- `columns`はグループフィールドの選択肢順に作り、値のない項目を末尾の値なし列に置く。グループフィールドの値が現在の選択肢にない項目も値なし列に置く。各列は`{key, name, color, items, count}`を持つ。値なし列は`{key=nil, no_value=true, name="No <グループフィールド名>", items, count}`とする（例: グループフィールドがStatusなら`No Status`）。単一選択フィールドがない場合は1列（`key=nil`、`name="No Status"`）とする。
 - `items`はAPIの項目位置順を保つ。項目は`{id, type, content, values, archived}`で、列の値はグループフィールドIDで引く。
 - `selected`は`{column_index, item_id}`。空の列を選んだ場合は`item_id=nil`とし、列ヘッダを選択状態にする。
 - `offsets`は列ごとの先頭項目のindex（1始まり）。`first_col`は表示する先頭列のindex、`visible`は表示列数。
@@ -27,7 +27,7 @@ UC-015とUC-019の利用者操作を実現する。対象規則はBR-063〜BR-07
 
 - 1行目は`<owner> / <title>  ·  <items> items  ·  filter: <filter>`を表示する。フィルタが先頭ビュー由来なら`view: <name>  ·  filter: <filter>`とする。読み込み中は`Loading <fetched>/<total>...`、打ち切り時は`Showing <max_items> of <total>`、失敗時は`Error: <理由>`を表示する。未取得のページが残っている間は`<items>`を`<fetched>/<total> items`とし、全件取得後は`<fetched> items`とする。
 - Project詳細の取得に失敗した場合はボードを開かず、理由を通知する。項目の取得に失敗した場合は、既に開いているボードのヘッダに`Error: <理由>`を表示し、直前の内容を保持する。
-- 2行目は列ヘッダを表示する。`● <name> <count>`とし、選択肢の色を付ける。右端に`+`を表示する。値なし列は`○ 値なし <count>`とする。選択中の列ヘッダを`GitHubProjectsColumnSelected`で強調する。列ヘッダ行全体の背景は`GitHubProjectsColumnHeader`とする。ヘッダの背景はpriority 1、ラベルは2、列背景は0にして、ヘッダが列背景に上書きされないようにする。
+- 2行目は列ヘッダを表示する。`● <name> <count>`とし、選択肢の色を付ける。右端に`+`を表示する。値なし列は`○ No <グループフィールド名> <count>`とする（例: `○ No Status 3`）。選択中の列ヘッダを`GitHubProjectsColumnSelected`で強調する。列ヘッダ行全体の背景は`GitHubProjectsColumnHeader`とする。ヘッダの背景はpriority 1、ラベルは2、列背景は0にして、ヘッダが列背景に上書きされないようにする。
 - 列幅は`column_width`（既定36、20〜80）を最小幅として、表示領域に合わせて自動調整する。表示列数は`max(1, floor((inner_width + 1) / (column_width + 1)))`と列数の小さい方とし、実効列幅は`max(column_width, floor((inner_width - (表示列数 - 1)) / 表示列数))`とし、割り切れない余りは最後の表示列に加えて合計を`inner_width`にする。これにより右側に余白を残さない。列の区切りは半角スペース1セルとし、`│`は使わない。列数が表示幅を超える場合は横スクロールし、選択列が画面外に出るときは`first_col`を調整する。
 - 列の本文は`GitHubProjectsColumnBg`の背景で塗る。列ごとに独立した縦の表示位置を持つ。`j`/`k`では選択中の列だけをスクロールし、他の列の位置を変えない。選択カードが表示領域より高い場合は先頭行を表示し、カーソルをタイトル行に置く。
 - 項目カードは角丸の枠線付きで、背景`GitHubProjectsCard`、枠線`GitHubProjectsCardBorder`を使う。カード幅は列幅に合わせ、高さは内容に応じて変動する。枠線は背景より高いextmark priorityで描き、全辺を同じ枠線色にする。

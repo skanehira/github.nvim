@@ -383,7 +383,7 @@ describe("projects board", function()
       state.columns[3].count,
       state.columns[4].count,
     })
-    assert.same({ "Todo", "In Progress", "Done", "値なし" }, {
+    assert.same({ "Todo", "In Progress", "Done", "No Status" }, {
       state.columns[1].name,
       state.columns[2].name,
       state.columns[3].name,
@@ -439,6 +439,19 @@ describe("projects board", function()
     assert.is_true(header_above, "missing header highlight above the column background")
   end)
 
+  it("names the no-value column after the group field", function()
+    open_board(1)
+    local detail = detail_response(1, "Board")
+    local stage = status_field()
+    stage.name = "Stage"
+    detail.data.user.projectV2.fields.nodes = { stage }
+    respond(1, detail)
+    respond(2, items_response(default_items()))
+    local _, buf = current_window("gh-projects-board")
+
+    assert.equals("No Stage", board.state(buf).columns[4].name)
+  end)
+
   it("renders a single column when the project has no single-select field", function()
     open_board(1)
     local detail = detail_response(1, "Board")
@@ -451,7 +464,7 @@ describe("projects board", function()
     assert.equals(1, #state.columns)
     assert.is_true(state.columns[1].no_value)
     assert.equals(4, state.columns[1].count)
-    assert.is_not_nil(list_lines(win)[2]:find("○ 値なし 4", 1, true))
+    assert.is_not_nil(list_lines(win)[2]:find("○ No Status 4", 1, true))
     assert.same({ column_index = 1, item_id = "I1" }, state.selected)
     assert.is_not_nil(list_lines(win)[4]:find("◉ r #1", 1, true))
   end)
@@ -1161,7 +1174,7 @@ describe("projects board", function()
     assert.same({ column_index = 4, item_id = "R1" }, board.state(buf).selected)
     assert.equals(4, board.state(buf).first_col)
     assert_card_cursor(win, buf, "[redacted]")
-    assert.is_not_nil(find_line(win, "○ 値なし 1"))
+    assert.is_not_nil(find_line(win, "○ No Status 1"))
   end)
 
   it("renders the board that started the request when the items response arrives in another tab", function()
