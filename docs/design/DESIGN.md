@@ -8,13 +8,13 @@
 
 ## 目的とスコープ
 
-Issue・コメントの閲覧、作成、更新、状態変更、担当者・ラベル編集、URL操作、関連PRのURL確認と、PR一覧の閲覧・検索を提供する。加えて、GitHub Projects v2のProject一覧・ボード閲覧、項目のフィールド編集、項目の追加・削除を提供する。公開URIは`github://`とする。Projectsはfloatウィンドウの画面とし、`github://` URIを持たない。入力補完は今回対象外。将来github-actions.nvimとreview.nvimを統合できるよう、機能ごとの設定・状態・依存・画面を分離する。詳細な操作と受け入れ基準はUSECASES.md、機能別契約はfeatures/を正本とする。
+Issue・コメントの閲覧、作成、更新、状態変更、担当者・ラベル編集、URL操作、関連PRのURL確認と、PR一覧の閲覧・検索を提供する。加えて、GitHub Projects v2のProject一覧・ボード閲覧、項目のフィールド編集、項目の追加・削除を提供する。公開URIは`github://`とする。Projectsはfloatウィンドウの画面とし、`github://` URIを持たない。Issue詳細ヘッダーのインライン編集（タイトル・担当者・ラベル・Projects/Status）と、担当者・ラベル・Projectsの入力補完を提供する。将来github-actions.nvimとreview.nvimを統合できるよう、機能ごとの設定・状態・依存・画面を分離する。詳細な操作と受け入れ基準はUSECASES.md、機能別契約はfeatures/を正本とする。
 
 ## アーキテクチャと技術選定
 
 Neovim Luaを使用し、最低版は実測した0.10.4とする。GitHub APIは認証をghへ委譲し、`gh api`を引数配列・JSON stdinで呼ぶ。Issue作成は`gh issue create -F <本文ファイル> -R github.com/<owner>/<repo>`の対話端末を使う。Projectsは`gh api graphql`で読み書きし、一覧・ボード・編集・確認・プレビュー・ヘルプの画面は`nvim_open_win`のfloatウィンドウで表示する。`github://`はBufReadCmd/BufWriteCmdで処理する。HTTPS入口は対応するGitHub Issue URLとPR一覧URLだけをBufAddで正規化し、標準netrwや他HTTPSハンドラを置換しない。
 
-依存方向は、機能UI → 各機能の操作 → 共通のGitHub/Git・Neovimアダプタとする。共通部はプロセス実行、gh呼出、URI解析、対象リポジトリの識別、画面・要求の所有管理を担当する。Projectsの画面は共通のfloat UI（`core/float.lua`）を使い、ProjectsのAPI層はowner解決、ページング、フィルタ、mutationを担当する。Issueの本文とレビューの下書きは別モデルにする。Actionsとレビューの実装や既存データ移行は将来の統合時に設計する。
+依存方向は、機能UI → 各機能の操作 → 共通のGitHub/Git・Neovimアダプタとする。共通部はプロセス実行、gh呼出、URI解析、対象リポジトリの識別、画面・要求の所有管理を担当する。Projectsの画面は共通のfloat UI（`core/float.lua`）を使い、ProjectsのAPI層はowner解決、ページング、フィルタ、mutationを担当する。Issue詳細のヘッダー編集は機能内の`header.lua`（行モデル・解析）、`fields.lua`（候補取得・名前解決・mutation）、`complete.lua`（入力補完）に分け、候補キャッシュは共通の`core/cache.lua`に置く。Issueの本文とレビューの下書きは別モデルにする。Actionsとレビューの実装や既存データ移行は将来の統合時に設計する。
 
 根拠: `gh-api-contracts`で実ghのREST/GraphQL・ページングと入力契約を確認、`nvim-runtime`で0.10.4のURI・非同期処理とnetrw共存を確認、`create-terminal`で0.10.4の対話端末・追記保護・二重起動抑止を確認した。`projects-api`でProjects v2の読取・書込・ページング・フィルタ・冪等性・反映遅延を確認し、`float-board`で0.10.4のfloat描画・スクロール・入力系画面を確認した。Issueの実GitHub書込みはPoCで実行していない。Projectsの書込みは破棄前提のスクラッチProjectでのみ実行した。詳細と再現コマンドはFEASIBILITY.mdを参照する。
 
@@ -42,7 +42,8 @@ Neovim Luaを使用し、最低版は実測した0.10.4とする。GitHub APIは
 | --- | --- | --- |
 | Issue/PR検索、Issue詳細、担当者・ラベル全件、テンプレート、関連PR | GraphQL `gh api graphql` | issue-list、issue-edit、issue-attributes、issue-create、related-pr、pulls |
 | PR一覧の検索（本文含む） | GraphQL `search(type:ISSUE, query:"repo:... type:pr ...")` | pulls |
-| Issueタイトル・本文・状態・担当者・ラベルの更新 | GraphQL `updateIssue` | issue-edit、issue-state、issue-attributes |
+| Issueタイトル・本文・状態・担当者・ラベル・Projects/Statusの更新 | GraphQL `updateIssue`、`addProjectV2ItemById`、`deleteProjectV2Item`、`updateProjectV2ItemFieldValue`、`clearProjectV2ItemFieldValue` | issue-edit、issue-state、issue-attributes、projects-api |
+| ヘッダーの入力補完候補（担当者・ラベル・Project・Status） | GraphQL `assignableUsers`、`labels`、`projectsV2`、`projectV2.fields` | issue-edit |
 | コメント一覧・単体取得・投稿・更新 | REST `repos/{owner}/{repo}/issues/{number}/comments`、`repos/{owner}/{repo}/issues/comments/{id}` | comment-list、comment-create、comment-edit |
 | 対話式のIssue作成 | `gh issue create` | issue-create |
 | Project一覧・owner解決 | REST `user`、`users/{login}`、GraphQL `user`/`organization.projectsV2` | projects-list、projects-api |
@@ -68,7 +69,7 @@ PR一覧はIssue一覧の検索・バッファ・描画・キーマップ・非�
 | `github://owner/repo/pulls` | PR一覧。対応HTTPS URLも受ける。最大30件、検索・プレビュー・選択・URLコピー・ブラウザに対応する。PRの作成・編集・レビュー・マージは対象外。 |
 | `github://owner/repo/issues` | Issue一覧。対応するGitHub HTTPS URLも受ける。 |
 | `github://owner/repo/issues/new` | Issue作成。 |
-| `github://owner/repo/issues/<number>` | Issue本文編集。 |
+| `github://owner/repo/issues/<number>` | Issue本文と編集可能なヘッダー（タイトル・担当者・ラベル・Projects）。 |
 | `github://owner/repo/issues/<number>/assignees`、`/labels` | 担当者・ラベル編集。 |
 | `github://owner/repo/issues/<number>/comments`、`/comments/new`、`/comments/<comment-id>` | コメント一覧・投稿・編集。comment-idは数値database ID。 |
 | `:GitHub related-pr [owner/repo] <commit>` | 関連PR先頭1件のURLを表示する。省略時はGit originを使う。既存`:GhGetAssociatedPullRequest <commit>` / `<owner> <repo> <commit>`も互換用に残す。 |
@@ -87,6 +88,8 @@ Projectsのキーマップは、一覧が`j`/`k`/`<CR>`/`r`/`q`/`<Esc>`、ボー
 - 一覧は移植元のコンパクトな列表示を使う。窓の再利用・検索バッファ・開き方・公開PlugとUserイベントはMIGRATION_PARITY.mdとdoc/github.txtに対応を記載する。
 - 仮想バッファはnolist・nonumber・nowrap・cursorline・bufhidden=hideを基本とし、プラグインが開く窓では、通常バッファへ戻ると元の窓設定を復元する。利用者・他プラグインによる標準分割はNeovimの設定継承に従い、新規窓全体をフックして変更しない。進行中の取得・保存は対象バッファへ表示する。
 - 本文のCRLFはLFへ正規化する。変更のない既存編集バッファの保存は更新を送らない。
+- Issue詳細のヘッダーは実バッファ行（タイトル・Assignees・Labels・Projects）として編集でき、状態・番号・リポジトリと区切り線は読み取り専用の仮想行にする。保存時はヘッダーを解析して変更項目だけを送り、Projectsのmutationは並列に送る。
+- 入力補完の候補は必要なときにだけ取得し、リポジトリ単位で5分間キャッシュする。同じ取得が並行した場合は1回のAPI呼び出しにまとめ、失敗はキャッシュしない。
 
 - 初期版はgithub.comを対象とし、github:// URIとowner/repo明示指定のhostはgithub.comとする。originがgithub.com以外の場合は対象外として案内する。GitHub上の対象はhost・owner・repoで識別し、ローカルrepo・worktree・操作開始時cwdとは分ける。API応答やキャッシュは機能・対象・画面ごとに区別する。
 - git/gh実行器、ブラウザ、クリップボードと時刻などの外界は注入可能にする。シェルへ入力を連結しない。認証ファイルを直接読まず、秘密をログに出さない。
@@ -115,6 +118,8 @@ Projectsのキーマップは、一覧が`j`/`k`/`<CR>`/`r`/`q`/`<Esc>`、ボー
 - Neovim 0.13 nightlyでは`create_spec.lua`の端末チャネル検証が失敗する。0.10.4では成功する。端末起動テストは0.10.4を基準にし、0.13 nightlyの修正は別途扱う。
 - Neovim 0.10.0〜0.10.3は未検証。最低版を0.10.4とする。
 - 実測したNeovim 0.13 nightlyの同梱netrwにはHTTPSハンドラがない。github.nvimは対象外のURLを処理せず、既存のハンドラがある場合は維持する。
+- Issue詳細ヘッダーの担当者は10件まで。Projectsは先頭10件を取得し、Statusは`group_by`（既定Status）と名前が一致する単一選択フィールドだけを編集対象にする。ヘッダーの補完は`<C-x><C-o>`で起動し、挿入モードの実操作は実装時の統合テストで確認する。
+- ヘッダーの候補は5分間キャッシュするため、他者による担当者・ラベル・Projectの変更は反映まで遅れることがある。`:edit!`はIssueを再取得するが候補キャッシュは保持する。
 - plenaryのテスト子Neovimは`-u NONE`を継承しないため、`VIMINIT`と`EXINIT`を除き、`XDG_CONFIG_DIRS`と`XDG_DATA_DIRS`を一時ディレクトリに指定して利用者の設定・ランタイム探索を分離する。
 - Projects APIは更新直後の読み取りが一時的に古い値を返すことがある（実測で約0〜3秒）。書込み後はmutationの応答でローカル状態を更新し、自動の再取得はしない。`r`による再取得を正とする。
 - Projectのフィルタはサーバ側で評価され、無効な条件でもエラーではなく0件を返すことがある。0件は成功結果として表示し、取得エラーと区別する。フィルタの構文検証は行わない。

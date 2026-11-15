@@ -10,6 +10,7 @@ UC-006の利用者操作を実現する。対象規則はBR-028, BR-029, BR-030,
 ## 入出力と振る舞い
 
 - `gha`/`ghl`または対応URIでカーソル行の担当者・ラベルを1行1件で編集する。現在の集合は完全に取得してから表示し、途中ページ取得失敗時は不完全な集合を保存可能にしない。
+- Issue詳細ヘッダーの2行目（担当者）・3行目（ラベル）でも同じ項目を直接編集できる（issue-edit設計）。保存時の照合規則（担当者は大文字小文字を区別せず10名まで、ラベルは完全一致）と候補キャッシュ（リポジトリ単位で5分）を共有する。
 - 空行を除き重複値を1件にして保存する。全行削除は対象項目の全解除。存在しないラベルや割当できないユーザーは理由を表示して入力を維持し、ラベルを暗黙作成しない。
 - 検証後のID集合を対象項目だけに置換する。成功後にも追記があれば未保存として残す。
 
@@ -42,7 +43,7 @@ UC-006の利用者操作を実現する。対象規則はBR-028, BR-029, BR-030,
 
 ## API
 
-GraphQL issueのassignees/labels connectionはpageInfo/endCursorで最後まで取得。assignableUsersとrepository labelsを対象repoで照合し、updateIssueのassigneeIdsまたはlabelIdsだけを指定する。空配列で全解除。DESIGN.md「GitHub API一覧」参照。
+GraphQL issueのassignees/labels connectionはpageInfo/endCursorで最後まで取得。assignableUsersとrepository labelsを対象repoで照合し、updateIssueのassigneeIdsまたはlabelIdsだけを指定する。空配列で全解除。ヘッダーからのインライン編集も同じ照合規則を使い、候補は`fields.lua`経由で取得してリポジトリ単位で5分間キャッシュする。DESIGN.md「GitHub API一覧」参照。
 
 ## 実装の配置
 
@@ -51,7 +52,7 @@ GraphQL issueのassignees/labels connectionはpageInfo/endCursorで最後まで�
 | Issue担当者・ラベル編集の状態・操作・表示 | 機能 | `lua/github/features/issues/attributes.lua` |
 | Issue担当者・ラベル編集の振る舞いの検証 | テスト | `lua/github/features/issues/attributes_spec.lua` |
 
-共通URI・プロセス・repo文脈の実装はfoundation設計に属し、操作固有コードは本機能が所有する。実行器・時刻・外界は注入する。各ファイルは実装時に作成する計画であり、現時点では存在しない。
+共通URI・プロセス・repo文脈の実装はfoundation設計に属し、操作固有コードは本機能が所有する。実行器・時刻・外界は注入する。ヘッダーからのインライン編集はissue-edit設計が所有し、`lua/github/features/issues/fields.lua`の候補解決を使う。
 
 ## エッジケースの決定
 

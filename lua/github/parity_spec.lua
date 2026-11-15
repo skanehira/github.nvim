@@ -43,7 +43,10 @@ describe("migration behavior from denops-gh", function()
   it("normalizes issue text, emits the ready hook and does not save unchanged content", function()
     vim.cmd("edit github://a/r/issues/7")
     respond(issue_data())
-    assert.same({ "Title", "old", "body" }, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+    assert.same(
+      { "Title", "Assignees   —", "Labels      —", "Projects    —", "old", "body" },
+      vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    )
     assert.same({ { "gh_open_issue", "github://a/r/issues/7", "markdown" } }, events)
     vim.cmd("write")
     assert.equals(1, #calls)
@@ -114,7 +117,10 @@ describe("migration behavior from denops-gh", function()
     respond({ data = { updateIssue = { issue = { id = "I7" } } } })
     assert.is_false(vim.api.nvim_buf_is_valid(title))
     assert.equals(body, vim.api.nvim_get_current_buf())
-    assert.same({ "Title", "old", "body" }, vim.api.nvim_buf_get_lines(body, 0, -1, false))
+    assert.same(
+      { "Title", "Assignees   —", "Labels      —", "Projects    —", "old", "body" },
+      vim.api.nvim_buf_get_lines(body, 0, -1, false)
+    )
   end)
 
   it("normalizes comment CRLF and does not send PATCH when unchanged", function()

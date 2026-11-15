@@ -220,20 +220,29 @@ github:issues-search
 ISSUE BODY                                        *github-buffer-issue-edit*
 
 github://{owner}/{repo}/issues/{number}
-    Read the Issue into a Markdown editing buffer. The first line is the
-    read-only title. A virtual header above the body shows the state (Open or
-    Closed), number, repository, assignees, labels, and Projects v2 project
-    names with the Status field when available. The header follows the window
+    Read the Issue into a Markdown editing buffer. The first four lines are
+    editable: the title, then Assignees, Labels, and Projects. A virtual header
+    above the title shows the state (Open or Closed), number, and repository;
+    a separator is shown below the Projects line. The header follows the window
     width; the body wraps.
+    Assignees are comma-separated logins (the @ is optional). Labels are
+    comma-separated names, shown as colored pills. Projects are comma-separated
+    Project names; append `  ·  Status: <value>` to set the Status field. An
+    empty value (or `—`) removes all entries of that row.
     Reading project items requires the project scope. Without it, the
     Projects row shows a dash and the rest of the Issue still opens.
     |:edit!| reloads the Issue and its header.
 
-    |:write| updates only the body; an empty body is allowed. A buffer with
-    no changes is not sent. CRLF text is normalized to LF. Unsaved edits are
-    retained on read or save failure, and edits made after a save starts
-    remain unsent and modified. The title line is read-only, and the header is
-    virtual text, so neither is written back to GitHub.
+    In the header, CTRL-X CTRL-O completes assignees, labels, project names,
+    and Status values. Candidates are fetched only when needed, cached for five
+    minutes per repository, and concurrent fetches share one request.
+
+    |:write| sends only the changed items: title, body, assignees, labels, and
+    Projects changes. An empty body is allowed. A buffer with no changes is not
+    sent. CRLF text is normalized to LF. Unsaved edits are retained on read or
+    save failure, and edits made after a save starts remain unsent and modified.
+    Invalid or unknown names, more than ten assignees, or missing header lines
+    keep the buffer modified and show the reason.
 
     ght opens |github-buffer-issue-title|. gha, ghl, and ghm open the same
     Issue's assignees, labels, and comments. Their destination menu offers
@@ -691,6 +700,7 @@ Issue list:
     <C-o>     *<Plug>(gh:issue:view)*                      Open in browser
 
 Issue body editing: ght, gha, ghl, and ghm use the same Plug mappings as above.
+In the editable header, CTRL-X CTRL-O completes the current field.
 
 Pull request list:
     Key       Plug                                      Action

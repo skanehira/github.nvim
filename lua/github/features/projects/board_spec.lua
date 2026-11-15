@@ -798,7 +798,10 @@ describe("projects board", function()
     respond(3, { data = { repository = { issue = { id = "I1", title = "Fix bug", body = "Issue body" } } } })
     local issue_buf = vim.api.nvim_get_current_buf()
     assert.equals("github://a/r/issues/1", vim.api.nvim_buf_get_name(issue_buf))
-    assert.equals("Fix bug\nIssue body", table.concat(vim.api.nvim_buf_get_lines(issue_buf, 0, -1, false), "\n"))
+    assert.equals(
+      "Fix bug\nAssignees   —\nLabels      —\nProjects    —\nIssue body",
+      table.concat(vim.api.nvim_buf_get_lines(issue_buf, 0, -1, false), "\n")
+    )
     vim.cmd("tabclose")
 
     vim.api.nvim_set_current_win(board_win)
