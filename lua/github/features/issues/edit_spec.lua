@@ -539,4 +539,138 @@ describe("issue editing", function()
     assert.equals(12, start_at(3, "Projects    Road"))
     assert.equals(33, start_at(3, "Projects    Roadmap  ·  Status: In"))
   end)
+  local roadmap_item = {
+    id = "PVTI_1",
+    project = { id = "PVT_1", title = "Roadmap" },
+    fieldValues = { nodes = { { name = "Todo", optionId = "OPT_TODO", field = { id = "PVTF_1", name = "Status" } } } },
+  }
+  local status_fields = {
+    node = {
+      fields = {
+        nodes = {
+          {
+            id = "PVTF_1",
+            name = "Status",
+            options = { { id = "OPT_TODO", name = "Todo" }, { id = "OPT_IN_PROGRESS", name = "In progress" } },
+          },
+        },
+        pageInfo = { hasNextPage = false },
+      },
+    },
+  }
+  local projects_list = {
+    repository = {
+      projectsV2 = {
+        nodes = { { id = "PVT_1", title = "Roadmap" }, { id = "PVT_2", title = "Ideas" } },
+        pageInfo = { hasNextPage = false },
+      },
+    },
+  }
+  local completion_cases = {
+    {
+      name = "an assignee",
+      line = 1,
+      typed = "Assignees   @al",
+      responses = {
+        {
+          "assignableUsers",
+          {
+            repository = {
+              assignableUsers = {
+                nodes = { { id = "U2", login = "bob" }, { id = "U1", login = "alice" } },
+                pageInfo = { hasNextPage = false },
+              },
+            },
+          },
+        },
+      },
+      expected = "Assignees   @alice",
+    },
+    {
+      name = "a label",
+      line = 2,
+      typed = "Labels      bu",
+      responses = {
+        {
+          "labels(first",
+          {
+            repository = {
+              labels = {
+                nodes = {
+                  { id = "L2", name = "enhancement", color = "00ff00" },
+                  { id = "L1", name = "bug", color = "ff0000" },
+                },
+                pageInfo = { hasNextPage = false },
+              },
+            },
+          },
+        },
+      },
+      expected = "Labels      bug",
+    },
+    {
+      name = "a project",
+      line = 3,
+      typed = "Projects    Id",
+      responses = { { "projectsV2", projects_list } },
+      expected = "Projects    Ideas",
+    },
+    {
+      name = "a status of the current project",
+      line = 3,
+      project_items = { roadmap_item },
+      typed = "Projects    Roadmap  ·  Status: In",
+      responses = { { "fields(first", status_fields } },
+      expected = "Projects    Roadmap  ·  Status: In progress",
+    },
+    {
+      name = "a status of a project found in the project list",
+      line = 3,
+      typed = "Projects    Ideas  ·  Status: In",
+      responses = { { "projectsV2", projects_list }, { "fields(first", status_fields } },
+      expected = "Projects    Ideas  ·  Status: In progress",
+    },
+  }
+  local function open_for_completion(case)
+    vim.cmd("edit github://a/r/issues/1")
+    response(1, {
+      repository = {
+        issue = {
+          id = "I1",
+          number = 1,
+          title = "Title",
+          state = "OPEN",
+          body = "body",
+          assignees = { nodes = {} },
+          labels = { totalCount = 0, nodes = {} },
+          projectItems = { nodes = case.project_items or {} },
+        },
+      },
+    })
+    vim.api.nvim_buf_set_lines(0, case.line, case.line + 1, false, { case.typed })
+    vim.api.nvim_win_set_cursor(0, { case.line + 1, 0 })
+  end
+  local function respond_all(case)
+    for _, item in ipairs(case.responses) do
+      respond_to(item[1], item[2])
+    end
+  end
+  for _, case in ipairs(completion_cases) do
+    it("completes " .. case.name .. " with CTRL-X CTRL-O when the candidates arrive while still inserting", function()
+      open_for_completion(case)
+      vim.defer_fn(function()
+        respond_all(case)
+        vim.api.nvim_feedkeys(vim.keycode("<Esc>"), "t", false)
+      end, 20)
+      vim.api.nvim_feedkeys(vim.keycode("A<C-x><C-o>"), "xt!", false)
+      assert.same({ case.expected }, vim.api.nvim_buf_get_lines(0, case.line, case.line + 1, false))
+    end)
+    it("completes " .. case.name .. " with CTRL-X CTRL-O when the candidates are already cached", function()
+      open_for_completion(case)
+      vim.api.nvim_feedkeys(vim.keycode("A<C-x><C-o><Esc>"), "xt", false)
+      respond_all(case)
+      vim.api.nvim_feedkeys(vim.keycode("A<C-x><C-o><Esc>"), "xt", false)
+      assert.same({ case.expected }, vim.api.nvim_buf_get_lines(0, case.line, case.line + 1, false))
+    end)
+  end
 end)

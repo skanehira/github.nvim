@@ -74,7 +74,19 @@ local function find_project(issue, title)
   end
 end
 
-local function finish(buf, line_index, start, items, word, filter_word, menu, strip)
+local function filter_matches(items, base, word, filter_word, menu, strip)
+  local needle = strip(base):lower()
+  local matches = {}
+  for _, item in ipairs(items) do
+    local filter_text = filter_word(item)
+    if filter_text and filter_text:lower():sub(1, #needle) == needle then
+      matches[#matches + 1] = { word = word(item), menu = menu }
+    end
+  end
+  return matches
+end
+
+local function finish(buf, line_index, start, matches_for)
   if vim.api.nvim_get_current_buf() ~= buf then
     return
   end
@@ -86,22 +98,14 @@ local function finish(buf, line_index, start, items, word, filter_word, menu, st
   end
   local line = vim.api.nvim_buf_get_lines(buf, line_index, line_index + 1, false)[1] or ""
   local cursor_col = vim.api.nvim_win_get_cursor(0)[2]
-  local base = line:sub(start + 1, cursor_col)
-  local needle = strip(base):lower()
-  local matches = {}
-  for _, item in ipairs(items) do
-    local filter_text = filter_word(item)
-    if filter_text and filter_text:lower():sub(1, #needle) == needle then
-      matches[#matches + 1] = { word = word(item), menu = menu }
-    end
-  end
+  local matches = matches_for(line:sub(start + 1, cursor_col))
   if #matches == 0 then
     return
   end
   vim.fn.complete(start + 1, matches)
 end
 
-function M.omnifunc(findstart, _base)
+function M.omnifunc(findstart, base)
   local buf = vim.api.nvim_get_current_buf()
   local state = require("github.features.issues.edit").state(buf)
   local line_index = vim.api.nvim_win_get_cursor(0)[1] - 1
@@ -124,38 +128,50 @@ function M.omnifunc(findstart, _base)
     end
     return text
   end
+  -- Cached candidates make the fields callback run synchronously inside this
+  -- omnifunc, where textlock turns vim.fn.complete() into E565. Return those
+  -- matches instead; only candidates arriving later go through complete().
+  local running, sync_matches = true, nil
+  local function deliver(items, word, filter_word, menu)
+    local function matches_for(text)
+      return filter_matches(items, text, word, filter_word, menu, strip)
+    end
+    if running then
+      sync_matches = matches_for(base)
+      return
+    end
+    finish(buf, line_index, start, matches_for)
+  end
+  local function by_name(item)
+    return item.name
+  end
+  local function by_title(item)
+    return item.title
+  end
   if kind == "assignees" then
     fields.assignable_users(target, function(items)
       if not items then
         return
       end
-      finish(buf, line_index, start, items, function(item)
+      deliver(items, function(item)
         return "@" .. item.login
       end, function(item)
         return item.login
-      end, "assignee", strip)
+      end, "assignee")
     end)
   elseif kind == "labels" then
     fields.labels(target, function(items)
       if not items then
         return
       end
-      finish(buf, line_index, start, items, function(item)
-        return item.name
-      end, function(item)
-        return item.name
-      end, "label", strip)
+      deliver(items, by_name, by_name, "label")
     end)
   elseif kind == "projects" then
     fields.projects(target, function(items)
       if not items then
         return
       end
-      finish(buf, line_index, start, items, function(item)
-        return item.title
-      end, function(item)
-        return item.title
-      end, "project", strip)
+      deliver(items, by_title, by_title, "project")
     end)
   elseif kind == "status" then
     local function complete_options(project_id)
@@ -173,29 +189,27 @@ function M.omnifunc(findstart, _base)
         if not field then
           return
         end
-        finish(buf, line_index, start, field.options, function(item)
-          return item.name
-        end, function(item)
-          return item.name
-        end, "status", strip)
+        deliver(field.options, by_name, by_name, "status")
       end)
     end
     local current = find_project(state.issue, project_title)
     if current then
-      return complete_options(current.project.id)
-    end
-    fields.projects(target, function(items)
-      if not items then
-        return
-      end
-      for _, item in ipairs(items) do
-        if item.title == project_title then
-          return complete_options(item.id)
+      complete_options(current.project.id)
+    else
+      fields.projects(target, function(items)
+        if not items then
+          return
         end
-      end
-    end)
+        for _, item in ipairs(items) do
+          if item.title == project_title then
+            return complete_options(item.id)
+          end
+        end
+      end)
+    end
   end
-  return {}
+  running = false
+  return sync_matches or {}
 end
 
 return M
