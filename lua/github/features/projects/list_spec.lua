@@ -246,6 +246,7 @@ describe("projects list", function()
     columns, lines = vim.o.columns, vim.o.lines
     vim.o.columns, vim.o.lines = 120, 40
     fake_gh()
+    require("github.core.cache").clear()
     vim.cmd("runtime plugin/github.lua")
   end)
   after_each(function()
@@ -258,7 +259,6 @@ describe("projects list", function()
   it("opens the current repository owner's projects when no owner is given", function()
     origin = "git@github.com:acme/r.git"
     vim.cmd("GitHub projects")
-    assert.same({ "git", "rev-parse", "--show-toplevel" }, git_calls[1].argv)
     assert.equals(vim.fn.getcwd(), git_calls[1].opts.cwd)
     assert.same({ "gh", "api", "--hostname", "github.com", "--method", "GET", "users/acme" }, calls[1].argv)
     respond(1, { login = "acme", type = "Organization" })
@@ -272,13 +272,38 @@ describe("projects list", function()
   it("opens the authenticated user's projects when the origin is not a github.com repository", function()
     origin = "https://gitlab.com/acme/r.git"
     vim.cmd("GitHub projects")
-    assert.equals(2, #git_calls)
     assert.same({ "gh", "api", "--hostname", "github.com", "--method", "GET", "user" }, calls[1].argv)
+  end)
+
+  for _, case in ipairs({
+    { args = "7", endpoint = "user" },
+    { args = "@me", endpoint = "user" },
+    { args = "@me 8", endpoint = "user" },
+    { args = "bob", endpoint = "users/bob" },
+  }) do
+    it("ignores the repository owner for GitHub projects " .. case.args, function()
+      origin = "git@github.com:acme/r.git"
+      vim.cmd("GitHub projects " .. case.args)
+      assert.same({ "gh", "api", "--hostname", "github.com", "--method", "GET", case.endpoint }, calls[1].argv)
+    end)
+  end
+
+  it("shares the cache between owner spellings that differ only in case", function()
+    vim.cmd("GitHub projects Bob")
+    respond(1, { login = "bob", type = "User" })
+    respond(2, projects_page({ project_node(1, "One", 0, true) }))
+    key("q")
+
+    vim.cmd("GitHub projects bob")
+    assert.same(
+      { "Projects for bob (user)  ·  1 open", "#1 One  0 items  public" },
+      list_lines(current_window("gh-projects-list"))
+    )
+    assert.equals(2, #calls)
   end)
 
   it("shows the authenticated user's project rows outside a repository", function()
     vim.cmd("GitHub projects")
-    assert.equals(1, #git_calls)
     assert.equals(0, #float_windows())
     assert.equals(1, #calls)
     assert.same({ "gh", "api", "--hostname", "github.com", "--method", "GET", "user" }, calls[1].argv)
@@ -490,22 +515,82 @@ describe("projects list", function()
     }, list_lines(failed))
   end)
 
-  it("reuses the same owner's list and refetches it", function()
+  it("reuses the same owner's open list without refetching it", function()
     vim.cmd("GitHub projects")
     respond(1, { login = "alice", type = "User" })
     respond(2, projects_page({ project_node(1, "One", 0, true) }))
     local win, buf = current_window("gh-projects-list")
 
     vim.cmd("GitHub projects")
-    respond(3, { login = "alice", type = "User" })
-    assert.same({ "Loading projects...", "#1 One  0 items  public" }, list_lines(win))
-    respond(4, projects_page({ project_node(2, "Two", 1, true) }))
     assert.same({ win, buf }, { current_window("gh-projects-list") })
+    assert.same({ "Projects for alice (user)  ·  1 open", "#1 One  0 items  public" }, list_lines(win))
+    assert.equals(2, #calls)
+  end)
+
+  it("shows the cached list at once after closing and refreshes it only with r", function()
+    vim.cmd("GitHub projects")
+    respond(1, { login = "alice", type = "User" })
+    respond(2, projects_page({ project_node(1, "One", 0, true), project_node(2, "Two", 0, true) }))
+    key("j")
+    key("q")
+    assert.is_nil(current_window("gh-projects-list"))
+
+    vim.cmd("GitHub projects")
+    local win, buf = current_window("gh-projects-list")
+    assert.same({
+      "Projects for alice (user)  ·  2 open",
+      "#1 One  0 items  public",
+      "#2 Two  0 items  public",
+    }, list_lines(win))
+    assert.same({ { 1, "#1 One  0 items  public", "GitHubProjectsCardSelected" } }, highlights(buf))
+    assert.equals(2, #calls)
+
+    key("r")
+    assert.equals(3, #calls)
+    assert.equals("graphql", calls[3].argv[3])
+    respond(3, projects_page({ project_node(3, "Three", 4, false) }))
+    key("q")
+    vim.cmd("GitHub projects")
     assert.same({
       "Projects for alice (user)  ·  1 open",
-      "#2 Two  1 items  public",
-    }, list_lines(win))
-    assert.equals(4, #calls)
+      "#3 Three  4 items  private",
+    }, list_lines(current_window("gh-projects-list")))
+    assert.equals(3, #calls)
+  end)
+
+  it("keeps the cached truncation and the last success when a refresh fails", function()
+    vim.cmd("GitHub projects bob")
+    respond(1, { login = "bob", type = "User" })
+    local nodes = {}
+    for index = 1, 100 do
+      nodes[index] = project_node(index, "Project " .. index, index, true)
+    end
+    respond(2, projects_page(nodes, true, "cursor"))
+    key("r")
+    fail(3, 1, "HTTP 502")
+    key("q")
+
+    vim.cmd("GitHub projects bob")
+    local rendered = list_lines(current_window("gh-projects-list"))
+    assert.equals("Showing 100 projects", rendered[1])
+    assert.equals("#100 Project 100  100 items  public", rendered[101])
+    assert.equals(3, #calls)
+  end)
+
+  it("fetches again on reopen when no list has been fetched successfully", function()
+    vim.cmd("GitHub projects")
+    respond(1, { login = "alice", type = "User" })
+    fail(2, 1, "HTTP 502")
+    key("q")
+
+    vim.cmd("GitHub projects")
+    assert.equals(3, #calls)
+    assert.equals("graphql", calls[3].argv[3])
+    respond(3, projects_page({ project_node(1, "One", 0, true) }))
+    assert.same(
+      { "Projects for alice (user)  ·  1 open", "#1 One  0 items  public" },
+      list_lines(current_window("gh-projects-list"))
+    )
   end)
 
   it("does not open the list when gh is unauthenticated or the owner is unavailable", function()
@@ -518,16 +603,24 @@ describe("projects list", function()
       { "GitHub projects: gh is not authenticated; run gh auth login --hostname github.com", vim.log.levels.ERROR },
     }, notices)
 
+    vim.cmd("GitHub projects")
+    assert.same({ "gh", "api", "--hostname", "github.com", "--method", "GET", "user" }, calls[2].argv)
+    fail(2, 4, "gh auth login required")
+
     vim.cmd("GitHub projects missing")
-    fail(2, 1, "HTTP 404")
+    fail(3, 1, "HTTP 404")
     assert.equals(0, #float_windows())
     assert.equals(buf, vim.api.nvim_get_current_buf())
-    assert.same({ "GitHub projects: GitHub request failed (exit 1): HTTP 404", vim.log.levels.ERROR }, notices[2])
+    assert.same({ "GitHub projects: GitHub request failed (exit 1): HTTP 404", vim.log.levels.ERROR }, notices[3])
+
+    vim.cmd("GitHub projects missing")
+    assert.same({ "gh", "api", "--hostname", "github.com", "--method", "GET", "users/missing" }, calls[4].argv)
+    fail(4, 1, "HTTP 404")
 
     vim.cmd("GitHub projects secret")
-    fail(3, 1, "HTTP 403")
+    fail(5, 1, "HTTP 403")
     assert.equals(0, #float_windows())
-    assert.equals(3, #notices)
+    assert.equals(5, #notices)
   end)
 
   it("shows usage for invalid arguments without calling gh", function()
@@ -563,6 +656,7 @@ describe("projects list", function()
     respond(1, { login = "alice", type = "User" })
     respond(2, projects_page({}))
 
+    require("github.core.cache").clear()
     vim.cmd("GitHub projects 7")
     assert.same({ "gh", "api", "--hostname", "github.com", "--method", "GET", "user" }, calls[3].argv)
     respond(3, { login = "alice", type = "User" })
@@ -572,6 +666,7 @@ describe("projects list", function()
     assert.is_not_nil(board_win)
     assert.equals("alice / Direct  ·  1 items  ·  filter: ", list_lines(board_win)[1])
 
+    require("github.core.cache").clear()
     vim.cmd("GitHub projects @me 8")
     assert.same({ "gh", "api", "--hostname", "github.com", "--method", "GET", "user" }, calls[6].argv)
     respond(6, { login = "alice", type = "User" })
@@ -621,10 +716,9 @@ describe("projects list", function()
     assert.same({ "GitHub projects: project not found", vim.log.levels.ERROR }, notices[1])
 
     vim.cmd("GitHub projects alice 6")
-    respond(4, { login = "alice", type = "User" })
     local detail = detail_response(6, "Closed")
     detail.data.user.projectV2.closed = true
-    respond(5, detail)
+    respond(4, detail)
     assert.is_nil(current_window("gh-projects-board"))
     assert.equals(parent, vim.api.nvim_get_current_win())
     assert.same({ "GitHub projects: Project #6 is closed", vim.log.levels.ERROR }, notices[2])
@@ -791,15 +885,14 @@ describe("projects list", function()
 
     vim.cmd("tabnew")
     vim.cmd("GitHub projects")
-    respond(3, { login = "alice", type = "User" })
-    respond(4, projects_page({ project_node(2, "Two", 0, true) }))
     local second_win, second_buf = current_window("gh-projects-list")
     assert.is_true(first_win ~= second_win)
     assert.is_true(first_buf ~= second_buf)
-    assert.same({ "Projects for alice (user)  ·  1 open", "#2 Two  0 items  public" }, list_lines(second_win))
+    assert.same(first_lines, list_lines(second_win))
+    assert.equals(2, #calls)
 
     key("r")
-    respond(5, projects_page({ project_node(3, "Three", 0, true) }))
+    respond(3, projects_page({ project_node(3, "Three", 0, true) }))
     assert.same({ "Projects for alice (user)  ·  1 open", "#3 Three  0 items  public" }, list_lines(second_win))
 
     vim.cmd("tabnext 1")

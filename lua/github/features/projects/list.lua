@@ -1,9 +1,13 @@
 local M = {}
 
+local cache = require("github.core.cache")
 local float = require("github.core.float")
 local ui = require("github.features.projects.ui")
 
 local HOST = "github.com"
+-- Kept until Neovim exits: a reopened list must not wait for GitHub, and r is
+-- the only way the user asks for fresh data.
+local FOREVER = math.huge
 local states = {}
 local resized = false
 
@@ -19,6 +23,17 @@ local function notify_error(message)
 end
 
 local function screen_name(owner)
+  return "projects-list:" .. HOST .. ":" .. owner
+end
+
+local function owner_cache_key(owner)
+  if owner == nil or owner == "@me" then
+    return "projects-owner:" .. HOST .. ":@me"
+  end
+  return "projects-owner:" .. HOST .. ":" .. owner:lower()
+end
+
+local function list_cache_key(owner)
   return "projects-list:" .. HOST .. ":" .. owner
 end
 
@@ -115,6 +130,7 @@ local function load(buf)
     state.error = nil
     state.projects = result.projects
     state.truncated = result.truncated and "Showing 100 projects" or nil
+    cache.set(list_cache_key(state.owner), { projects = state.projects, truncated = state.truncated }, FOREVER)
     reconcile_selection(state, previous_number, previous_index)
     render(buf)
   end)
@@ -162,9 +178,14 @@ local function open_list(resolved, parent_win)
   local width, height = float.target_size(0.7, 0.7)
   local win, buf = float.open({ name = name, parent = parent_win, width = width, height = height })
   local state = states[buf]
+  local cached = cache.get(list_cache_key(resolved.owner))
   if state then
     state.owner, state.type = resolved.owner, resolved.type
-    load(buf)
+    if cached then
+      render(buf)
+    else
+      load(buf)
+    end
     return
   end
   state = {
@@ -208,7 +229,13 @@ local function open_list(resolved, parent_win)
     end,
   })
   ensure_resize_autocmd()
-  load(buf)
+  if cached then
+    state.projects, state.truncated = cached.projects, cached.truncated
+    reconcile_selection(state, nil, 1)
+    render(buf)
+  else
+    load(buf)
+  end
   return win
 end
 
@@ -222,13 +249,27 @@ local function attached(tab, parent)
   return vim.api.nvim_win_get_tabpage(parent) == tab
 end
 
+local function resolve_owner(owner, callback)
+  local key = owner_cache_key(owner)
+  local cached = cache.get(key)
+  if cached then
+    return callback(cached)
+  end
+  require("github.features.projects.api").new().resolve_owner({ host = HOST, owner = owner }, function(resolved, err)
+    if resolved then
+      cache.set(key, resolved, FOREVER)
+    end
+    callback(resolved, err)
+  end)
+end
+
 local function requested_owner(opts, callback)
   local source = opts.from_repository
   if not source then
     return callback(opts.owner)
   end
-  -- Not being in a github.com checkout is not an error here: the list falls
-  -- back to the authenticated user, as it did before origin was consulted.
+  -- Not being in a github.com checkout is not an error: Projects belong to an
+  -- owner, not a repository, so the list falls back to the authenticated user.
   require("github.core.repo").resolve(source.cwd, source.run, function(target)
     callback(target and target.owner or nil)
   end)
@@ -242,8 +283,7 @@ function M.open(opts)
     if not attached(tab, parent) then
       return
     end
-    local api = require("github.features.projects.api").new()
-    api.resolve_owner({ host = HOST, owner = owner }, function(resolved, err)
+    resolve_owner(owner, function(resolved, err)
       if not attached(tab, parent) then
         return
       end
