@@ -1,24 +1,25 @@
 # Projectボードの閲覧
 
 - 種別: 機能設計書
-- 対象 UC: UC-015 (docs/design/USECASES.md)
-- 対象ストーリー: US-021
+- 対象 UC: UC-015、UC-019 (docs/design/USECASES.md)
+- 対象ストーリー: US-021、US-025
 
 ## 何を作るか
 
-UC-015の利用者操作を実現する。対象規則はBR-063〜BR-071。一覧とボードの起動はprojects-list、float UIの共通規則はprojects-ui、APIはprojects-api、フィールド編集と項目の追加・削除はそれぞれprojects-field-editとprojects-item-manageに従う。
+UC-015とUC-019の利用者操作を実現する。対象規則はBR-063〜BR-071とBR-093〜BR-096。一覧とボードの起動はprojects-list、float UIの共通規則はprojects-ui、APIはprojects-api、フィールド編集と項目の追加・削除はそれぞれprojects-field-editとprojects-item-manageに従う。
 
 ## 入出力と振る舞い
 
 ### ボードの状態
 
-- ボードは`{project, fields, group_field, columns, items, view, filter, selected, offsets, first_col, visible, loading, error, generation, truncated, pagination, body_cache}`を保持する。
+- ボードは`{project, fields, group_field, columns, items, view, filter, selected, offsets, first_col, visible, loading, error, generation, truncated, pagination, body_cache, moving}`を保持する。
 - `columns`はグループフィールドの選択肢順に作り、値のない項目を末尾の値なし列に置く。グループフィールドの値が現在の選択肢にない項目も値なし列に置く。各列は`{key, name, color, items, count}`を持つ。値なし列は`{key=nil, no_value=true, name="値なし", items, count}`とする。単一選択フィールドがない場合は1列（`key=nil`）とする。
 - `items`はAPIの項目位置順を保つ。項目は`{id, type, content, values, archived}`で、列の値はグループフィールドIDで引く。
 - `selected`は`{column_index, item_id}`。空の列を選んだ場合は`item_id=nil`とし、列ヘッダを選択状態にする。
 - `offsets`は列ごとの先頭項目のindex（1始まり）。`first_col`は表示する先頭列のindex、`visible`は表示列数。
 - `filter`は初期状態では先頭ビューの`filter`（nullなら空）とし、`view`は先頭ビューの名前を保持する。`ghs`で変更した後は`view=nil`とする。
 - `body_cache`は項目IDごとの本文を保持し、`r`とフィルタ適用で破棄する。
+- `moving`は項目の移動中だけ`{item_id, pending, origin}`を持ち、それ以外は`nil`とする。`origin`は`{index, value, column_key}`で、移動前の`items`上の位置、グループフィールドの値、列のキー（値なし列は`nil`）を保持する。`pending`は保存の送信中を示す。
 - `loading`は`nil`、`initial`、`refresh`、`filter`、`more`のいずれか。`error`は最後の失敗理由を保持する。`truncated`は`max_items`で打ち切ったことを示す。
 - `pagination`は`{after, has_next, done, total}`。`after`は次ページのカーソル、`has_next`は未取得のページがあるか、`done`は取得を終えたか、`total`はフィルタ適用後の総数。`has_next`が真の間は`j`/`k`/`g`/`G`で末尾に近づくと次ページを取得する。
 
@@ -54,6 +55,25 @@ UC-015の利用者操作を実現する。対象規則はBR-063〜BR-071。一�
 - 列を移動したときは、その列の選択項目を同じindexにclampする。項目がない場合は列ヘッダを選ぶ。空の列では`j`/`k`は移動しない。
 - 選択中の列と項目を強調し、画面外へ出るときは表示列・表示位置をスクロールする。
 - 選択は項目IDで保持する。グループフィールドの変更で列が変わった場合は変更後の列の項目を選択する。追加した項目は列の末尾に置き、その項目を選択する。削除した項目の選択は次の項目、なければ前の項目、なければ列ヘッダへ移す。
+
+### 項目の移動
+
+- `<C-h>`/`<C-l>`は選択項目の移動を始め、項目を前/次の列へ動かす。端の列で外側へ動かす場合は、項目を動かさずに移動だけを始める。空の列を選んでいる場合は`GitHub projects: select an item to move`を案内し、移動を始めない。カウントを付けると、その数だけ列を進める。
+- 移動中のキーは次のとおり。表示はローカルのモデルを書き換えて描き直し、確定までGitHubへ送らない。選択は移動中の項目に置く。
+  - `<C-h>`/`<C-l>`: 項目を前/次の列へ動かす。項目のグループフィールドの値を移動先の列の選択肢にし、値なし列では値を消す。項目は移動先の列の中で`items`の順に並ぶ。
+  - `j`/`k`: 列の中で項目を次/前の項目と入れ替える。`items`上で、次の項目の直後、または前の項目の直前へ項目を移す。列の端では動かない。
+  - `<CR>`: 移動を確定する。
+  - `q`/`<Esc>`: 移動を中止する。項目を`origin.index`へ戻し、グループフィールドの値を`origin.value`へ戻す。ボードは閉じない。
+  - それ以外のボードのキー: `GitHub projects: finish the move with <CR> or cancel it with q`を案内し、操作を実行しない。
+- 確定では、列のキーが`origin.column_key`と違えば列の変更とみなす。位置の変更は列の中の並びで判定する。項目を`items`上の`origin.index`へ戻したと仮定した列の並びと、いまの列の並びが違えば位置の変更とみなす。`j`/`k`は別の列の項目を飛ばして動くため、`items`全体の順で比べると、`j`のあと`k`で列の見た目が元に戻っても位置の変更と判定してしまう。
+  - どちらも変わっていなければ、中止と同じく項目を`origin.index`へ、グループフィールドの値を`origin.value`へ戻して移動を終える。何も送らず、通知しない。
+  - 列が変わっていれば、projects-apiのグループフィールドの更新（値なし列は解除）を送る。成功したら`origin.value`と`origin.column_key`を保存した値へ置き換える。
+  - 位置が変わっていれば、続けてprojects-apiの`move_item`を、列の中で直前に表示している項目のIDを`after_id`として送る。列の先頭なら`after_id`を送らず、Projectの先頭へ置く。列だけを変えた確定では位置を送らない。`afterId`の省略はProjectの先頭への移動になり、列だけを変えた項目まで先頭へ動かしてしまうためである。
+  - すべて成功したら、ローカルの`items`の並びをGitHubに合わせる。位置を送った場合は項目を`after_id`の直後（`after_id`がなければ先頭）へ置き、送らなかった場合は`origin.index`へ戻す。`j`/`k`は列の中だけで並びを入れ替えるため、そのままでは別の列の項目との前後がGitHubと食い違い、後で列だけを変えたときに表示がずれる。続けて`moving`を`nil`にして再描画し、`GitHub projects: move done`をINFOで通知する。
+- 送信中は`pending`を真にし、移動のキーを受け付けない。失敗したら理由をERRORで通知し、`pending`を偽に戻して移動を続ける。表示は移動先のまま保ち、自動で再送しない。`<CR>`で再試行すると保存済みの列の変更は送らず、`q`/`<Esc>`で中止すると保存済みの列の元の位置へ戻す。
+- 応答はボードの状態と`moving`が送信時と同じときだけ反映し、ボードを閉じた後や中止した後の応答で画面を更新しない。
+- 初回取得・再取得・フィルタ適用の取得中（`loading`が`initial`、`refresh`、`filter`）は移動を始めず、`GitHub projects: wait for the items to load before moving`を案内する。移動中は`r`と`ghs`を受け付けず、同じProjectのボードを開き直しても再取得せずに確定か中止を促す。そのため移動中に`items`が置き換わることはない。安全網として、`items`を置き換えるときは`moving`を破棄する。ページの追加取得（`more`）は`items`の末尾に足すため、取得中も移動を始められ、`origin.index`は変わらない。
+- `after_id`は列に表示している取得済みの項目から選ぶ。フィルタで除かれた項目と未取得のページの項目は使わないため、並び順はそれらとの前後関係を保証しない。
 
 ### プレビュー
 
@@ -93,14 +113,14 @@ UC-015の利用者操作を実現する。対象規則はBR-063〜BR-071。一�
 ### ヘルプと終了
 
 - `?`は一覧・ボード・フィールド編集・追加・削除のキー操作をヘルプのfloatで表示する。ボードは残る。`j`/`k`/`gg`/`G`でスクロールし、`q`/`<Esc>`で閉じる。
-- `q`/`<Esc>`はボードを閉じ、子画面（プレビュー・ヘルプ・フィールド編集・追加・確認）も閉じる。一覧から開いた場合は一覧へ、直接開いた場合は元のウィンドウへ戻る。
+- 移動中でなければ、`q`/`<Esc>`はボードを閉じ、子画面（プレビュー・ヘルプ・フィールド編集・追加・確認）も閉じる。一覧から開いた場合は一覧へ、直接開いた場合は元のウィンドウへ戻る。
 - ボードを閉じた後に取得応答が届いても、ボードを再作成せず、他の画面を更新しない。
 
 ### 画面サイズと再利用
 
 - ボードは幅90%・高さ90%を基本とし、projects-uiの`target_size`と中央配置を使う。
 - `VimResized`で幅・高さ・表示列数を再計算し、選択と列ごとの位置を保って再描画する。
-- 同じProjectのボードが既に開いている場合は既存をフォーカスして再取得する。別Projectのボードは別画面とし、タブページごとに管理する。
+- 同じProjectのボードが既に開いている場合は既存をフォーカスして再取得する。項目の移動中は再取得しない。別Projectのボードは別画面とし、タブページごとに管理する。
 - 別タブのボードを操作・更新しない。
 
 ## API
@@ -127,13 +147,15 @@ query($owner: String!, $repo: String!, $number: Int!) {
 
 `ghe`は`github.features.projects.field_edit.open(buf)`、`ghn`は`github.features.projects.item_manage.open_add(buf)`、`ghd`は`github.features.projects.item_manage.open_delete(buf)`を遅延requireして呼ぶ。モジュールが未実装の場合は`GitHub projects: <module> is not available`を案内する。
 
+項目の移動はprojects-apiの`update_field`・`clear_field`（列の変更）と`move_item`（位置の変更）を使い、ghを直接呼ばない。
+
 API層の項目`content`は`total_count`、`sub_issues`、`related_pulls`を持つが、`ui.card`は`totalCount`、`subIssuesSummary`、`closedByPullRequestsReferences`を読む。ボードは描画時にこれらの名前へ詰め替え、API層と共通UIのどちらも変更しない。
 
 ## 実装の配置
 
 | 処理 | 層 | 実装先ファイル |
 | --- | --- | --- |
-| ボードの状態・描画・ナビゲーション・フィルタ・プレビュー・再取得 | 機能 | `lua/github/features/projects/board.lua` |
+| ボードの状態・描画・ナビゲーション・フィルタ・プレビュー・再取得・項目の移動 | 機能 | `lua/github/features/projects/board.lua` |
 | ボードの振る舞いの検証 | テスト | `lua/github/features/projects/board_spec.lua` |
 
 項目・本文の取得はprojects-api、float・入力・確認・プレビュー・ヘルプの共通UIはprojects-ui、一覧との親子関係はprojects-listの子が実装する。本issueは`board.lua`と`board_spec.lua`を所有する。ボードはghを直接呼ばず、Projects API層からモデルを受け取る。テストではfake ghと`core/float.lua`を使い、実GitHubの書込みを行わない。`doc/github.txt`のボードのキー説明は実装issueで更新する。
@@ -145,7 +167,8 @@ API層の項目`content`は`total_count`、`sub_issues`、`related_pulls`を持�
 - 長い文字列: 日本語を含むタイトルはカード幅で折り返す。ラベル・担当者・フィルタは表示幅を超える分を切り詰めるか`+N`でまとめる。
 - 種別: Issue、PR、DraftIssue、REDACTED。アーカイブ済みは表示しない。
 - プレビュー: 本文取得の失敗、削除済み、権限なし、redacted、下書きの本文。
-- 移動: Issueの新しいタブ、PRのブラウザ、下書きのプレビュー、redactedの案内。
+- 項目を開く: Issueの新しいタブ、PRのブラウザ、下書きのプレビュー、redactedの案内。
+- 項目の移動: 端の列、列の端、空の列、値なし列への移動、変更なしの確定、列だけ・位置だけ・両方の変更、列の保存後の位置の失敗、送信中のキー、移動中のほかの操作、取得中の開始、移動中のボードの開き直し、`j`/`k`の往復、カウント、中止。
 - URL: 下書き・redactedにURLがない、ブラウザ・クリップボードの失敗。
 - フィルタ: 空、変更なし、0件、無効な条件、取得失敗、キャンセル。
 - 再取得: 選択項目の消失、列の消失、0件、失敗。
@@ -167,8 +190,17 @@ API層の項目`content`は`total_count`、`sub_issues`、`related_pulls`を持�
 | （US-021）`ghs`でフィルタを入力してEnterを押すと、その条件の項目だけがボードに表示される。空のフィルタで全件に戻り、`q`/`<C-c>`で中止すると直前の結果が維持される。 | 結合 |
 | （US-021）フィルタに一致する項目がないときは0件であることが表示され、取得に失敗したときは理由が表示されて直前の結果とフィルタが保持される。 | 結合 |
 | （US-021）`r`を実行すると同じProjectとフィルタで再取得され、選択中の項目が存在すれば選択が維持される。 | 結合 |
-| （US-021）アーカイブ済みの項目は表示されず、内容を取得できない項目はredactedと表示されて本文プレビューと移動ができない。 | 結合 |
+| （US-021）アーカイブ済みの項目は表示されず、内容を取得できない項目はredactedと表示されて本文プレビューと項目を開く操作ができない。 | 結合 |
 | （US-021）`?`でキー操作のヘルプがfloatで表示され、ボードは残る。 | 結合 |
 | （US-021）ボードを開いた後で古い取得応答が届いても、新しい結果や別の画面が上書きされない。 | 結合 |
+| （US-025）項目を選んで`<C-l>`を実行すると、項目が次の列へ移り、`<CR>`で確定するとその列の値がGitHubに保存されて`move done`と通知される。 | 結合 |
+| （US-025）項目を値なし列へ移して確定すると、グループフィールドの値が解除される。 | 結合 |
+| （US-025）移動中に`j`/`k`を実行すると、列の中で項目の位置が入れ替わり、`<CR>`で確定すると並び順がGitHubに保存される。 | 結合 |
+| （US-025）列だけを変えて確定した場合は、並び順を送らない。 | 結合 |
+| （US-025）列と位置を変えずに確定した場合は、何も送られない。 | 結合 |
+| （US-025）移動中に`q`/`<Esc>`を実行すると、項目が移動前の列と位置へ戻り、何も送られず、ボードは開いたままになる。 | 結合 |
+| （US-025）保存に失敗したときは理由が表示され、移動中の表示が保たれて、`<CR>`で再試行できる。 | 結合 |
+| （US-025）移動中にほかのボード操作を実行すると、確定か中止を促す案内が表示され、その操作は実行されない。 | 結合 |
+| （US-025）空の列で`<C-h>`/`<C-l>`を実行すると、項目を選ぶよう案内され、移動は始まらない。 | 結合 |
 
 受け入れ基準に加え、空の列・0件のボード・フィルタ0件の表示、長い日本語タイトルの折り返しとカード高さの変動、列幅の自動調整と横スクロール、列ごとの縦位置の保持、選択項目の消失時のclamp、Issueを新しいタブで開くこと、PR/下書き/redactedの分岐、本文プレビューのキャッシュと失敗、`max_items`打ち切りの表示を結合テストする。

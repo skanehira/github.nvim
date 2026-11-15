@@ -493,6 +493,7 @@ Project board:
     ghe       Edit the selected item's fields
     ghn       Add an existing Issue/PR or a draft Issue
     ghd       Delete the selected item from the Project
+    <C-h>/<C-l> Start moving the selected item to the previous / next column
     r         Reload the board
     ?         Show key help
     q / <Esc> Close the board and its child windows
@@ -501,7 +502,7 @@ Project board:
     and <C-u> scroll it; q or <Esc> closes only the preview. <CR> opens
     an Issue in a new tab as `github://<owner>/<repo>/issues/<number>`,
     a PR in the browser, and a draft Issue in the preview. A redacted
-    item cannot be previewed, moved, or opened. <C-o> opens an Issue or
+    item cannot be previewed or opened. <C-o> opens an Issue or
     PR URL in the browser, and ghy writes it to the + register. Draft
     and redacted items report that they have no URL. Browser and
     clipboard failures are reported; an unconfirmed clipboard result is
@@ -517,6 +518,35 @@ Project board:
     board; j, k, gg, and G scroll the help. q or <Esc> closes the
     board and its child windows, returning to the Project list when the
     board was opened from it, or to the original window.
+
+Moving an item:
+    Key       Action
+    ------------------------------------------------------------------------
+    <C-h>/<C-l> Move the item to the previous / next column
+    j / k     Move the item down / up within the column
+    <CR>      Save the move
+    q / <Esc> Cancel the move and put the item back
+
+    <C-h> or <C-l> on the board starts moving the selected item and
+    moves it to the previous or next column; at the first or last
+    column the move starts without changing the column. On an empty
+    column it asks you to select an item, and while the items are being
+    loaded or reloaded it asks you to wait. Nothing is sent to GitHub
+    until <CR>. <CR> sends only what changed: a column change updates
+    the group field (the no-value column clears it), and a position
+    change, made with j or k, places the item after the item above it
+    in the column, or at the top of the Project when it is first in the
+    column. The position is compared within the column, so j followed
+    by k sends nothing. When
+    everything is saved, `GitHub projects: move done` is shown. A move
+    that changes neither the column nor the position ends without a
+    request or message. q or <Esc> cancels the move, puts the item back
+    in its original column and position, and keeps the board open.
+    Other board keys, and opening the same Project again, report that
+    the move must be saved or cancelled first. A failed save shows the reason and keeps the move; <CR>
+    retries without resending a column change that was already saved,
+    and q or <Esc> returns the item to its original position in the
+    saved column. Keys are ignored while a save is in progress.
 
 FIELD EDITING
 
@@ -654,7 +684,7 @@ Draft body:
     gone is not reported as deleted; the board is kept and r reloads
     it. After deletion, the selection moves to the next item, then the
     previous item, then the column header. A redacted item can be
-    deleted, but it cannot be previewed, moved, or opened.
+    deleted, but it cannot be previewed or opened.
 
 Delete confirmation:
     Key       Action
@@ -861,7 +891,7 @@ LIMITS                                                       *github-limits*
   of the selected column, up to `max_items` (default 1000). Truncation is
   displayed. Reload with r to fetch again from the first page.
 - Project views are not switched or saved; the lowest-numbered view's filter
-  is the initial filter. Item reordering, archiving, multi-select and
+  is the initial filter. Archiving, multi-select and
   iteration editing, creating or editing Projects and fields, and editing a
   draft Issue's title or body after creation are not provided. Projects
   expose no <Plug> mappings and do not support mouse operations. Each tab
@@ -877,7 +907,7 @@ LIMITS                                                       *github-limits*
 - Built-in Project fields (Title, Assignees, Labels, and others) are edited
   through the existing Issue operations, not the field editor. Items whose
   content cannot be read are shown as [redacted]; they can be deleted from
-  the Project but cannot be previewed, moved, or opened. Draft Issues have
+  the Project but cannot be previewed or opened. Draft Issues have
   no URL.
 
 ==============================================================================

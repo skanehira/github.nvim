@@ -8,7 +8,7 @@
 
 ## 目的とスコープ
 
-Issue・コメントの閲覧、作成、更新、状態変更、担当者・ラベル編集、URL操作、関連PRのURL確認と、PR一覧の閲覧・検索を提供する。加えて、GitHub Projects v2のProject一覧・ボード閲覧、項目のフィールド編集、項目の追加・削除を提供する。公開URIは`github://`とする。Projectsはfloatウィンドウの画面とし、`github://` URIを持たない。Issue詳細ヘッダーのインライン編集（タイトル・担当者・ラベル・Projects/Status）と、担当者・ラベル・Projectsの入力補完を提供する。将来github-actions.nvimとreview.nvimを統合できるよう、機能ごとの設定・状態・依存・画面を分離する。詳細な操作と受け入れ基準はUSECASES.md、機能別契約はfeatures/を正本とする。
+Issue・コメントの閲覧、作成、更新、状態変更、担当者・ラベル編集、URL操作、関連PRのURL確認と、PR一覧の閲覧・検索を提供する。加えて、GitHub Projects v2のProject一覧・ボード閲覧、項目のフィールド編集、項目の別の列・位置への移動、項目の追加・削除を提供する。公開URIは`github://`とする。Projectsはfloatウィンドウの画面とし、`github://` URIを持たない。Issue詳細ヘッダーのインライン編集（タイトル・担当者・ラベル・Projects/Status）と、担当者・ラベル・Projectsの入力補完を提供する。将来github-actions.nvimとreview.nvimを統合できるよう、機能ごとの設定・状態・依存・画面を分離する。詳細な操作と受け入れ基準はUSECASES.md、機能別契約はfeatures/を正本とする。
 
 ## アーキテクチャと技術選定
 
@@ -49,14 +49,15 @@ Neovim Luaを使用し、最低版は実測した0.10.4とする。GitHub APIは
 | Project一覧・owner解決 | REST `user`、`users/{login}`、GraphQL `user`/`organization.projectsV2` | projects-list、projects-api |
 | Projectのフィールド・ビュー・項目 | GraphQL `projectV2`、`items`、`fields`、`views` | projects-board、projects-api |
 | ボードの本文プレビュー | GraphQL `repository.issueOrPullRequest`（`body`） | projects-board |
-| 項目のフィールド更新・解除 | GraphQL `updateProjectV2ItemFieldValue`、`clearProjectV2ItemFieldValue` | projects-field-edit、projects-api |
+| 項目のフィールド更新・解除 | GraphQL `updateProjectV2ItemFieldValue`、`clearProjectV2ItemFieldValue` | projects-field-edit、projects-board、projects-api |
+| 項目の位置変更 | GraphQL `updateProjectV2ItemPosition` | projects-board、projects-api |
 | 既存Issue/PRのnode ID解決 | GraphQL `repository.issueOrPullRequest` | projects-item-manage、projects-api |
 | 項目の追加（既存Issue/PR・下書き） | GraphQL `addProjectV2ItemById`、`addProjectV2DraftIssue` | projects-item-manage、projects-api |
 | 項目の削除 | GraphQL `deleteProjectV2Item` | projects-item-manage、projects-api |
 
 GraphQLはJSON `{query, variables}`を`--input -`で渡し、RESTもメソッド・endpoint・stdinを明示する。結果は終了コード、stdout、stderr、GraphQL errorsを確認する。ラベル・担当者はpageInfoを終端までたどり、集合を完全取得できない場合は置換を許さない。コメント単体の`issue_url`を指定Issueと照合する。検索で返ったIssueのリポジトリを照合し、入力された条件で別リポジトリへ対象が広がらないようにする。
 
-ProjectsはownerをREST `user`/`users/{login}`でユーザーとOrgに分けて解決し、GraphQLの`projectsV2`/`projectV2`で取得する。項目は`items`を100件/pageで`pageInfo`を辿り、`query`フィルタ、`orderBy:{field:POSITION,direction:ASC}`、`archivedStates:[NOT_ARCHIVED]`を指定する。`max_items`で打ち切った場合は画面に示す。フィールド値は`ProjectV2FieldValue`の型（text/number/date/singleSelectOptionId）に合わせ、解除は`clearProjectV2ItemFieldValue`を使う。`addProjectV2ItemById`は冪等であり、一時的な競合エラーは再実行できる。書き込み後は応答でローカル状態を更新し、自動再送しない。
+ProjectsはownerをREST `user`/`users/{login}`でユーザーとOrgに分けて解決し、GraphQLの`projectsV2`/`projectV2`で取得する。項目は`items`を100件/pageで`pageInfo`を辿り、`query`フィルタ、`orderBy:{field:POSITION,direction:ASC}`、`archivedStates:[NOT_ARCHIVED]`を指定する。`max_items`で打ち切った場合は画面に示す。フィールド値は`ProjectV2FieldValue`の型（text/number/date/singleSelectOptionId）に合わせ、解除は`clearProjectV2ItemFieldValue`を使う。項目の位置は`updateProjectV2ItemPosition`で直前の項目（`afterId`）を指定し、省略するとProjectの先頭へ置く。`addProjectV2ItemById`は冪等であり、一時的な競合エラーは再実行できる。書き込み後は応答でローカル状態を更新し、自動再送しない。
 
 PR一覧はIssue一覧の検索・バッファ・描画・キーマップ・非同期要求の基盤を`pull`モードで再利用し、GraphQL `search`の`type:pr`で最大30件を取得する。表示はIssue一覧と同じ列（番号・タイトル・状態・担当者・ラベル・コメント数）とし、MERGEDはCLOSEDと区別する。本文プレビューは検索で取得済みの`body`を使い、追加のクエリを発行しない。PRの作成・編集・レビュー・マージ・コメント投稿は対象外。
 
@@ -81,7 +82,7 @@ PR一覧はIssue一覧の検索・バッファ・描画・キーマップ・非�
 
 PR一覧のキーマップは`j`/`k`/`gg`/`G`/`<C-j>`/`<C-k>`/`K`/`<C-o>`/`ghy`/`ghs`。`:edit!`で最後に成功した検索条件を再取得する。PRの作成・編集・レビュー・マージ・コメント投稿は対象外。
 
-Projectsのキーマップは、一覧が`j`/`k`/`<CR>`/`r`/`q`/`<Esc>`、ボードが`h`/`l`/`j`/`k`/`H`/`L`/`g`/`G`/`K`/`<CR>`/`<C-o>`/`ghy`/`ghs`/`ghe`/`ghn`/`ghd`/`r`/`?`/`q`/`<Esc>`。フィールド編集は`j`/`k`/`<CR>`/`q`/`<Esc>`、単一選択の選択肢は`j`/`k`/`<CR>`/`q`/`<Esc>`、テキスト・数値・日付の入力は`<CR>`/`<C-c>`と通常モードの`q`、確認は`y`/`n`/`q`/`<Esc>`。追加の選択は`j`/`k`/`<CR>`/`q`/`<Esc>`、既存項目の指定は`<CR>`/`<C-c>`と通常モードの`q`、下書きのタイトルは`<CR>`で本文へ、`<C-c>`と通常モードの`q`で中止する。本文は`:w`で追加、`q`/`<Esc>`で中止する。プレビューは`j`/`k`/`gg`/`G`/`<C-d>`/`<C-u>`/`q`/`<Esc>`、ヘルプは`j`/`k`/`gg`/`G`/`q`/`<Esc>`。Projectsはfloat画面のため、`github://` URIとHTTPS入口を持たない。
+Projectsのキーマップは、一覧が`j`/`k`/`<CR>`/`r`/`q`/`<Esc>`、ボードが`h`/`l`/`j`/`k`/`H`/`L`/`g`/`G`/`K`/`<CR>`/`<C-o>`/`ghy`/`ghs`/`ghe`/`ghn`/`ghd`/`<C-h>`/`<C-l>`/`r`/`?`/`q`/`<Esc>`。項目の移動中は`<C-h>`/`<C-l>`/`j`/`k`/`<CR>`/`q`/`<Esc>`だけを受け付ける。フィールド編集は`j`/`k`/`<CR>`/`q`/`<Esc>`、単一選択の選択肢は`j`/`k`/`<CR>`/`q`/`<Esc>`、テキスト・数値・日付の入力は`<CR>`/`<C-c>`と通常モードの`q`、確認は`y`/`n`/`q`/`<Esc>`。追加の選択は`j`/`k`/`<CR>`/`q`/`<Esc>`、既存項目の指定は`<CR>`/`<C-c>`と通常モードの`q`、下書きのタイトルは`<CR>`で本文へ、`<C-c>`と通常モードの`q`で中止する。本文は`:w`で追加、`q`/`<Esc>`で中止する。プレビューは`j`/`k`/`gg`/`G`/`<C-d>`/`<C-u>`/`q`/`<Esc>`、ヘルプは`j`/`k`/`gg`/`G`/`q`/`<Esc>`。Projectsはfloat画面のため、`github://` URIとHTTPS入口を持たない。
 
 ## 横断規約
 
@@ -105,6 +106,7 @@ Projectsのキーマップは、一覧が`j`/`k`/`<CR>`/`r`/`q`/`<Esc>`、ボー
 - Projectsの列は`group_by`（既定Status）と名前が一致する単一選択フィールドの選択肢順とし、値のない項目は末尾の値なし列に置く。`group_by`が見つからなければ最初の単一選択フィールドを使い、単一選択フィールドがなければ1列（`nil`）にする。項目は100件/pageで取得し、`query`フィルタ、`orderBy POSITION`、`archivedStates NOT_ARCHIVED`を指定する。`max_items`で打ち切った場合は画面に示す。フィルタの0件は成功結果として扱い、取得エラーと区別する。
 - ProjectsのフィルタはGitHubのProjectフィルタ文字列をそのまま使う。初期条件は`number`が最小のビューのフィルタとし、`ghs`で変更できる。空のフィルタは全件、変更なしは再取得しない。
 - Projectsの編集対象は単一選択・テキスト・数値・日付のカスタムフィールドに限定する。組み込みフィールド（Title・Assignees・Labelsなど）は`dataType`で除外し、既存のIssue操作に委ねる。値の解除は`clearProjectV2ItemFieldValue`を使う。書込み後はmutationの応答でローカル状態を更新し、ボードを再描画する。自動の再取得・再送はしない。`group_field`の単一選択の変更では項目を新しい列へ移し、それ以外の単一選択は値を更新して同じ列に留まる。選択は項目IDで維持する。
+- ボードの項目の移動は`<C-h>`/`<C-l>`で始め、確定までローカルの表示だけを変える。確定時は変わったものだけを、グループフィールドの更新・解除、`updateProjectV2ItemPosition`の順に送り、すべて成功したら`move done`と通知する。列だけを変えた確定では位置を送らない。中止は表示を戻して何も送らない。失敗時は移動を続け、自動で再送しない。
 - Projectsの追加は`addProjectV2ItemById`（冪等）と`addProjectV2DraftIssue`、削除は`deleteProjectV2Item`を使う。削除はProjectから項目を外すだけでIssue/PR自体を削除しない。一時的な競合エラーは理由を表示し、利用者の再操作を受け付ける。子画面は親のボード/一覧が閉じたら閉じる。入力中の内容は失敗時に保持する。
 - Projectsの取得・書込みは画面IDと要求世代に紐付け、閉じた画面や古い要求で他の画面を更新しない。ボードを閉じた後に応答が届いても再作成しない。
 
@@ -123,8 +125,9 @@ Projectsのキーマップは、一覧が`j`/`k`/`<CR>`/`r`/`q`/`<Esc>`、ボー
 - plenaryのテスト子Neovimは`-u NONE`を継承しないため、`VIMINIT`と`EXINIT`を除き、`XDG_CONFIG_DIRS`と`XDG_DATA_DIRS`を一時ディレクトリに指定して利用者の設定・ランタイム探索を分離する。
 - Projects APIは更新直後の読み取りが一時的に古い値を返すことがある（実測で約0〜3秒）。書込み後はmutationの応答でローカル状態を更新し、自動の再取得はしない。`r`による再取得を正とする。
 - Projectのフィルタはサーバ側で評価され、無効な条件でもエラーではなく0件を返すことがある。0件は成功結果として表示し、取得エラーと区別する。フィルタの構文検証は行わない。
+- 項目の並び順は取得済みの項目（フィルタに一致し、読み込んだページの項目）に対する相対位置として保存する。フィルタで除かれた項目と未取得のページの項目は`afterId`に使わないため、それらとの前後関係は保証しない。
 - 項目は100件/page、最大`max_items`件（既定1000）、Project一覧は最大100件。Project一覧は開いているProjectが100件になるまで`pageInfo`を辿り（最大10ページ）、続きがあれば打ち切ったことを表示する。画面のページ送りと全件取得の保証はしない。上限で打ち切った場合はその旨を表示する。
-- ビューは`number`が最小のビューのフィルタだけを初期条件に使い、切替・保存はしない。`groupByFields`は空だったため使わない。列は`group_by`で指定した単一選択フィールドから作る。項目の並び順変更・アーカイブ・Project/フィールド自体の作成/編集/削除は対象外。
+- ビューは`number`が最小のビューのフィルタだけを初期条件に使い、切替・保存はしない。`groupByFields`は空だったため使わない。列は`group_by`で指定した単一選択フィールドから作る。アーカイブ・Project/フィールド自体の作成/編集/削除は対象外。
 - Projectのフィールドは最大50件、ビューは最大10件を取得する。超えるProjectでは先頭のみを使い、後続のフィールドは編集対象に表示しない。
 - 編集対象は単一選択・テキスト・数値・日付のカスタムフィールドに限定する。複数選択・イテレーション、下書きIssueの追加後のタイトル・本文編集は対象外。組み込みフィールドは`dataType`（TITLE・ASSIGNEES・LABELSなど）で除外する。`isIssueField`は全フィールドでfalseだったため判定に使わない。
 - floatは0.10.4と0.13で描画・スクロール・リサイズ・クローズを実測済み。0.10.4の`nvim_win_get_config`は`style`を返さないが表示は成立する。ヘッドレスでは挿入モードの実操作を検証できないため、実装時の統合テストで確認する。マウス操作は対象外。
@@ -136,7 +139,7 @@ Projectsのキーマップは、一覧が`j`/`k`/`<CR>`/`r`/`q`/`<Esc>`、ボー
 
 将来のActions・レビュー統合時の公開API互換、既存レビューの保存先・worktree移行、キーと画面の互換方針は、その統合時に決める。
 
-Projectsのビュー切替、項目の並び順変更、アーカイブ、複数選択・イテレーションの編集、下書きIssueの追加後のタイトル・本文編集は初期版の対象外とし、必要になった時点で設計する。Projectsのキーマップは初期版では固定キーマップとし、`<Plug>`マッピングを公開しない。将来の要望に応じて検討する。
+Projectsのビュー切替、アーカイブ、複数選択・イテレーションの編集、下書きIssueの追加後のタイトル・本文編集は初期版の対象外とし、必要になった時点で設計する。Projectsのキーマップは初期版では固定キーマップとし、`<Plug>`マッピングを公開しない。将来の要望に応じて検討する。
 
 ## 用語・成果物一覧
 
@@ -151,6 +154,7 @@ Projectsのビュー切替、項目の並び順変更、アーカイブ、複数
 | floatウィンドウ | `nvim_open_win`で開く浮動ウィンドウ。画面スタックで管理する。 | Projectsの全画面 |
 | フィールド | Projectのカスタムフィールド。単一選択・テキスト・数値・日付を編集対象とする。 | projects-field-edit |
 | 項目 | Projectに追加されたIssue・PR・下書きIssue。 | projects-board、projects-item-manage |
+| 項目の移動 | ボードで`<C-h>`/`<C-l>`から始め、`<CR>`で確定する列・位置の変更。projects-boardが所有する。 | projects-board、projects-api |
 
 ## 依拠する外部事実
 

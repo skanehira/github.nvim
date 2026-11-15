@@ -2,11 +2,11 @@
 
 - 種別: 機能設計書
 - 対象 UC: なし（Projectsの共通API）
-- 対象ストーリー: US-020〜US-023
+- 対象ストーリー: US-020〜US-023、US-025
 
 ## 何を作るか
 
-Projects v2のowner解決、Project一覧、Projectのフィールド・ビュー・項目の取得、項目のフィールド更新・解除、項目の追加・削除をgh経由で提供する。対象規則はBR-054〜BR-084。認証・実行・リポジトリ文脈と非同期の共通規約はDESIGN.md「横断規約」、gh adapterの契約はfoundation設計に従う。
+Projects v2のowner解決、Project一覧、Projectのフィールド・ビュー・項目の取得、項目のフィールド更新・解除、項目の位置変更、項目の追加・削除をgh経由で提供する。対象規則はBR-054〜BR-084とBR-094。認証・実行・リポジトリ文脈と非同期の共通規約はDESIGN.md「横断規約」、gh adapterの契約はfoundation設計に従う。
 
 ## 入出力と振る舞い
 
@@ -64,6 +64,13 @@ Projects v2のowner解決、Project一覧、Projectのフィールド・ビュ�
 - 送信前に検証する。数値は`tonumber`で有限の数値になること、日付は`YYYY-MM-DD`形式で実在する日付であること、単一選択は選択肢IDがそのフィールドの選択肢に含まれること。空のテキストは解除として扱い、`clearProjectV2ItemFieldValue`を送る（値更新は送らない）。
 - 成功時は項目IDと新しい値を返す。失敗時は種別と理由を返し、自動で再送しない。
 - 同じフィールドの同時編集はGitHubが最後に受け付けた値を正とする。他のフィールドを巻き戻さない。
+
+### 項目の位置変更
+
+- `move_item(project_id, item_id, after_id, callback)`は`updateProjectV2ItemPosition(input:{projectId, itemId, afterId})`を実行する。`after_id`の項目の直後へ置き、`after_id`が`nil`なら`afterId`を送らずProjectの先頭へ置く。
+- 送信前にProject ID・項目ID・`after_id`（指定時）が空でない文字列であることを検証する。
+- 応答は`clientMutationId`だけを要求し、`updateProjectV2ItemPosition`がオブジェクトなら成功として`{item_id, after_id}`を返す。オブジェクトでなければ`unknown`とする。失敗時は種別と理由を返し、自動で再送しない。
+- 列の変更はこのmutationではなく、グループフィールドの更新・解除で行う。
 
 ### 項目の追加
 
@@ -239,6 +246,16 @@ mutation($projectId: ID!, $itemId: ID!) {
 }
 ```
 
+項目の位置変更:
+
+```graphql
+mutation($projectId: ID!, $itemId: ID!, $afterId: ID) {
+  updateProjectV2ItemPosition(input: {projectId: $projectId, itemId: $itemId, afterId: $afterId}) {
+    clientMutationId
+  }
+}
+```
+
 ## 実装の配置
 
 | 処理 | 層 | 実装先ファイル |
@@ -281,6 +298,7 @@ API層は画面を持たない。画面は返されたモデルを描画し、mu
 | 既存項目の追加が冪等で、重複時に`duplicate=true`を返す。 | 単体 |
 | 下書きIssueのタイトル必須と本文任意を検証する。 | 単体 |
 | 項目の削除がProjectからのみで、Issue/PRを削除しない要求である。 | 単体 |
+| 項目の位置変更が`afterId`を指定時だけ送り、不正な応答とGraphQL errorsを失敗として返す。 | 単体 |
 | GraphQL errors・HTTP 4xx・起動失敗を種別と理由に変換し、成功扱いしない。 | 単体 |
 | 書込み失敗時に自動再送せず、結果不明を成功と断定しない。 | 単体 |
 | 古い要求の応答や閉じた画面の応答で、別画面の状態を更新しない。 | 単体 |

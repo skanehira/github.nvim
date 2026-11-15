@@ -117,9 +117,12 @@ Open a board directly. A numeric first argument is a Project number:
 | `ghe` | — | Edit fields | — |
 | `ghn` | — | Add existing Issue/PR or draft | — |
 | `ghd` | — | Delete item from Project | — |
+| `<C-h>` / `<C-l>` | — | Start moving the item to the previous / next column | — |
 | `r` | Reload | Reload | — |
 | `?` | — | Key help | — |
 | `q` / `<Esc>` | Close | Close board and children | Close editor |
+
+While an item is being moved, `<C-h>` / `<C-l>` move it to the previous / next column, `j` / `k` move it down / up within the column, `<CR>` saves the move and shows `move done`, and `q` / `<Esc>` cancel it and put the item back. Other board keys are rejected until the move is saved or cancelled. A column change updates the group field (the no-value column clears it); a position change is sent only when `j` / `k` changed the order within the column. A failed save keeps the move so `<CR>` can retry.
 
 Single-select options use `j` / `k` and `<CR>` to apply, with a final `値を解除` entry to clear the value. Text, number, and date fields use a one-line input: `<CR>` applies, `<C-c>` cancels, and an empty input clears the field. Number and date values are validated before sending.
 
@@ -149,9 +152,9 @@ Only github.com is supported. Lists show up to 30 Issues/PRs or 100 comments, wi
 
 Clipboard writes use the `+` register. Neovim cannot reliably confirm provider completion, so the plugin reports the requested count and an unconfirmed result. Detectable failures are reported separately.
 
-Project lists show at most 100 open Projects; fields are limited to the first 50 and views to the first 10. Items are fetched up to `max_items` without page navigation, and truncation is displayed. Project views are not switched or saved, and item reordering, archiving, multi-select and iteration editing, and creating or editing Projects or fields are not included. Built-in fields such as Title, Assignees, and Labels are edited through the Issue operations.
+Project lists show at most 100 open Projects; fields are limited to the first 50 and views to the first 10. Items are fetched up to `max_items` without page navigation, and truncation is displayed. Project views are not switched or saved, and archiving, multi-select and iteration editing, and creating or editing Projects or fields are not included. Built-in fields such as Title, Assignees, and Labels are edited through the Issue operations.
 
-Project writes update the local board from the response and do not reload automatically; `r` fetches the current state. Reads immediately after a write can be stale for a few seconds. Filters are evaluated by GitHub, so a filter that matches no items is shown as a successful empty result. Redacted items can be deleted from the Project but cannot be previewed, moved, or opened; draft Issues have no URL.
+Project writes update the local board from the response and do not reload automatically; `r` fetches the current state. Reads immediately after a write can be stale for a few seconds. Filters are evaluated by GitHub, so a filter that matches no items is shown as a successful empty result. Redacted items can be deleted from the Project but cannot be previewed or opened; draft Issues have no URL.
 
 Completion, Actions, PR review, Gists, repository-file browsing, and README buffers are not included. Actions and review integration are planned for a later release.
 
