@@ -1070,6 +1070,61 @@ describe("Projects API", function()
       assert.same({ item_id = "I1" }, result)
     end)
 
+    it("moves an item after another item or to the top when no previous item is given", function()
+      local client, calls = scripted({
+        { data = { updateProjectV2ItemPosition = { clientMutationId = vim.NIL } } },
+        { data = { updateProjectV2ItemPosition = { clientMutationId = vim.NIL } } },
+      })
+      local api = new_api(client)
+      local results = {}
+      local function collect(index)
+        return function(value, err)
+          results[index] = { value = value, err = err }
+        end
+      end
+      api.move_item("P1", "I1", "I2", collect(1))
+      api.move_item("P1", "I1", nil, collect(2))
+      assert.same({ projectId = "P1", itemId = "I1", afterId = "I2" }, calls[1].variables)
+      assert.same({ projectId = "P1", itemId = "I1" }, calls[2].variables)
+      assert.is_truthy(calls[1].query:find("updateProjectV2ItemPosition", 1, true))
+      assert.same({ value = { item_id = "I1", after_id = "I2" } }, results[1])
+      assert.same({ value = { item_id = "I1" } }, results[2])
+    end)
+
+    it("rejects an empty project, item or previous item ID without sending a move", function()
+      local client, calls = scripted({})
+      local api = new_api(client)
+      for _, args in ipairs({ { "", "I1", "I2" }, { "P1", "", "I2" }, { "P1", "I1", "" } }) do
+        local result, err
+        api.move_item(args[1], args[2], args[3], function(value, failure)
+          result, err = value, failure
+        end)
+        assert.is_nil(result)
+        assert.equals("validation", err.kind)
+      end
+      assert.equals(0, #calls)
+    end)
+
+    it("reports a malformed or failed move as an error", function()
+      local cases = {
+        { data = { updateProjectV2ItemPosition = vim.NIL }, kind = "unknown" },
+        {
+          failure = { reason = "GraphQL errors returned", errors = { "Could not resolve to a node" } },
+          kind = "not_found",
+        },
+      }
+      for _, response in ipairs(cases) do
+        local client = scripted({ response })
+        local api = new_api(client)
+        local result, err
+        api.move_item("P1", "I1", "I2", function(value, failure)
+          result, err = value, failure
+        end)
+        assert.is_nil(result)
+        assert.equals(response.kind, err.kind)
+      end
+    end)
+
     it("does not treat a missing deleted item as success", function()
       local cases = {
         { data = { deleteProjectV2Item = { deletedItemId = vim.NIL } }, kind = "not_found" },

@@ -1267,6 +1267,396 @@ describe("projects board", function()
     assert_card_cursor(win, buf, "✎ Draft idea")
   end)
 
+  describe("moving items", function()
+    local MOVE_DONE = { "GitHub projects: move done", vim.log.levels.INFO }
+    local MOVE_BLOCKED = { "GitHub projects: finish the move with <CR> or cancel it with q", vim.log.levels.ERROR }
+
+    local function column_ids(buf, index)
+      local ids = {}
+      for _, item in ipairs(board.state(buf).columns[index].items) do
+        ids[#ids + 1] = item.id
+      end
+      return ids
+    end
+
+    local function variables(index)
+      return vim.json.decode(calls[index].opts.stdin).variables
+    end
+
+    local function field_updated(id)
+      return { data = { updateProjectV2ItemFieldValue = { projectV2Item = { id = id } } } }
+    end
+
+    local function field_cleared(id)
+      return { data = { clearProjectV2ItemFieldValue = { projectV2Item = { id = id } } } }
+    end
+
+    local function position_updated()
+      return { data = { updateProjectV2ItemPosition = { clientMutationId = vim.NIL } } }
+    end
+
+    local function open_default_board()
+      open_board(1)
+      respond(1, detail_response(1, "Board"))
+      respond(2, items_response(default_items()))
+      return current_window("gh-projects-board")
+    end
+
+    it("maps <C-h> and <C-l> on the board", function()
+      local _, buf = open_default_board()
+      assert_mapping(buf, "n", "<C-H>")
+      assert_mapping(buf, "n", "<C-L>")
+    end)
+
+    it("moves an item to the next column with <C-l> and saves only the group field on <CR>", function()
+      local win, buf = open_default_board()
+
+      key("<C-l>")
+      assert.same({ "I3" }, column_ids(buf, 1))
+      assert.same({ "I1", "I2" }, column_ids(buf, 2))
+      assert.same({ column_index = 2, item_id = "I1" }, board.state(buf).selected)
+      assert_card_cursor(win, buf, "Fix bug")
+      assert.equals(2, #calls)
+
+      key("<CR>")
+      assert.equals(3, #calls)
+      assert.same(
+        { projectId = "P1", itemId = "I1", fieldId = "status", value = { singleSelectOptionId = "doing" } },
+        variables(3)
+      )
+      respond(3, field_updated("I1"))
+      assert.equals(3, #calls)
+      assert.same({ MOVE_DONE }, notices)
+      assert.same({ "I1", "I2" }, column_ids(buf, 2))
+      assert.equals("doing", board.selected_item(buf).values.status.option_id)
+      assert.equals(1, #vim.api.nvim_list_tabpages())
+
+      key("<CR>")
+      assert.equals(2, #vim.api.nvim_list_tabpages())
+    end)
+
+    it("clears the group field when an item is moved to the no-value column", function()
+      local _, buf = open_default_board()
+      key("l")
+      key("<C-l>")
+      key("<C-l>")
+      assert.same({ "I2", "R1" }, column_ids(buf, 4))
+
+      key("<CR>")
+      assert.same({ projectId = "P1", itemId = "I2", fieldId = "status" }, variables(3))
+      assert.is_truthy(vim.json.decode(calls[3].opts.stdin).query:find("clearProjectV2ItemFieldValue", 1, true))
+      respond(3, field_cleared("I2"))
+      assert.same({ MOVE_DONE }, notices)
+      assert.equals(3, #calls)
+    end)
+
+    it("reorders an item within its column with j and k and saves the position on <CR>", function()
+      local win, buf = open_default_board()
+
+      key("<C-h>")
+      assert.same({ column_index = 1, item_id = "I1" }, board.state(buf).selected)
+      key("j")
+      assert.same({ "I3", "I1" }, column_ids(buf, 1))
+      assert_card_cursor(win, buf, "Fix bug")
+      key("j")
+      assert.same({ "I3", "I1" }, column_ids(buf, 1))
+
+      key("<CR>")
+      assert.equals(3, #calls)
+      assert.same({ projectId = "P1", itemId = "I1", afterId = "I3" }, variables(3))
+      respond(3, position_updated())
+      assert.same({ MOVE_DONE }, notices)
+      assert.same({ "I3", "I1" }, column_ids(buf, 1))
+    end)
+
+    it("moves an item to the top of its column without a previous item", function()
+      local _, buf = open_default_board()
+      key("j")
+      key("<C-h>")
+      key("k")
+      assert.same({ "I3", "I1" }, column_ids(buf, 1))
+
+      key("<CR>")
+      assert.same({ projectId = "P1", itemId = "I3" }, variables(3))
+      respond(3, position_updated())
+      assert.same({ MOVE_DONE }, notices)
+    end)
+
+    it("saves the group field and then the position when both changed", function()
+      local _, buf = open_default_board()
+      key("<C-l>")
+      key("j")
+      assert.same({ "I2", "I1" }, column_ids(buf, 2))
+
+      key("<CR>")
+      assert.same(
+        { projectId = "P1", itemId = "I1", fieldId = "status", value = { singleSelectOptionId = "doing" } },
+        variables(3)
+      )
+      assert.equals(3, #calls)
+      respond(3, field_updated("I1"))
+      assert.same({ projectId = "P1", itemId = "I1", afterId = "I2" }, variables(4))
+      assert.same({}, notices)
+      respond(4, position_updated())
+      assert.same({ MOVE_DONE }, notices)
+      assert.same({ "I2", "I1" }, column_ids(buf, 2))
+    end)
+
+    for _, case in ipairs({
+      { name = "a column round trip", keys = { "<C-l>", "<C-h>" } },
+      { name = "j then k", keys = { "<C-h>", "j", "k" } },
+      { name = "k then j", keys = { "j", "<C-h>", "k", "j" } },
+      { name = "j then k in another column and back", keys = { "<C-l>", "j", "k", "<C-h>" } },
+    }) do
+      it("does not send anything when " .. case.name .. " leaves the column and order unchanged", function()
+        local _, buf = open_default_board()
+        for _, value in ipairs(case.keys) do
+          key(value)
+        end
+        assert.same({ "I1", "I3" }, column_ids(buf, 1))
+        assert.same({ "I2" }, column_ids(buf, 2))
+        key("<CR>")
+        assert.equals(2, #calls)
+        assert.same({}, notices)
+        assert.is_nil(board.state(buf).moving)
+        assert.equals(1, #vim.api.nvim_list_tabpages())
+      end)
+    end
+
+    it("moves an item to the top of another column without a previous item", function()
+      local _, buf = open_default_board()
+      key("j")
+      key("<C-l>")
+      assert.same({ "I2", "I3" }, column_ids(buf, 2))
+      key("k")
+      assert.same({ "I3", "I2" }, column_ids(buf, 2))
+
+      key("<CR>")
+      respond(3, field_updated("I3"))
+      assert.same({ projectId = "P1", itemId = "I3" }, variables(4))
+      respond(4, position_updated())
+      assert.same({ MOVE_DONE }, notices)
+    end)
+
+    local function draft(id, option)
+      return item_node({ id = id, type = "DRAFT_ISSUE", option = option, content = draft_content("Draft " .. id, "") })
+    end
+
+    local function item_ids(buf)
+      local ids = {}
+      for _, item in ipairs(board.state(buf).items) do
+        ids[#ids + 1] = item.id
+      end
+      return ids
+    end
+
+    local function open_board_with(nodes)
+      open_board(1)
+      respond(1, detail_response(1, "Board"))
+      respond(2, items_response(nodes))
+      return current_window("gh-projects-board")
+    end
+
+    it("moves by the count given before <C-h>, <C-l>, j and k", function()
+      local _, buf = open_board_with({
+        draft("A", "todo"),
+        draft("B", "todo"),
+        draft("C", "todo"),
+        draft("D", "todo"),
+        draft("E", "done"),
+      })
+      key("2<C-l>")
+      assert.same({ "A", "E" }, column_ids(buf, 3))
+      key("2<C-h>")
+      assert.same({ "A", "B", "C", "D" }, column_ids(buf, 1))
+      key("2j")
+      assert.same({ "B", "C", "A", "D" }, column_ids(buf, 1))
+      key("2k")
+      assert.same({ "A", "B", "C", "D" }, column_ids(buf, 1))
+      key("2<C-l>")
+      assert.same({ "A", "E" }, column_ids(buf, 3))
+      key("q")
+
+      key("2l")
+      key("2<C-h>")
+      assert.same({ "A", "B", "C", "D", "E" }, column_ids(buf, 1))
+    end)
+
+    it("keeps the local order equal to GitHub when the move sends no position", function()
+      local _, buf = open_default_board()
+      key("<C-h>")
+      key("j")
+      key("k")
+      key("<CR>")
+      assert.equals(2, #calls)
+      assert.same({ "I1", "I2", "I3", "R1" }, item_ids(buf))
+
+      key("<C-l>")
+      key("<CR>")
+      respond(3, field_updated("I1"))
+      assert.equals(3, #calls)
+      assert.same({ MOVE_DONE }, notices)
+      assert.same({ "I1", "I2" }, column_ids(buf, 2))
+      assert.same({ "I1", "I2", "I3", "R1" }, item_ids(buf))
+    end)
+
+    it("keeps the original local order when only the column is saved after j and k", function()
+      local _, buf = open_board_with({ draft("A", "todo"), draft("B", "todo"), draft("X", "doing") })
+      key("<C-l>")
+      key("j")
+      key("k")
+      assert.same({ "A", "X" }, column_ids(buf, 2))
+      key("<CR>")
+      respond(3, field_updated("A"))
+      assert.equals(3, #calls)
+      assert.same({ MOVE_DONE }, notices)
+      assert.same({ "A", "B", "X" }, item_ids(buf))
+    end)
+
+    it("places the item after the sent previous item in the local order", function()
+      local _, buf = open_board_with({
+        draft("A", "todo"),
+        draft("X", "doing"),
+        draft("B", "todo"),
+        draft("C", "todo"),
+      })
+      key("G")
+      key("<C-h>")
+      key("k")
+      assert.same({ "A", "C", "B" }, column_ids(buf, 1))
+      key("<CR>")
+      assert.same({ projectId = "P1", itemId = "C", afterId = "A" }, variables(3))
+      respond(3, position_updated())
+      assert.same({ "A", "C", "X", "B" }, item_ids(buf))
+
+      key("l")
+      key("<C-h>")
+      key("<CR>")
+      respond(4, field_updated("X"))
+      assert.same({ "A", "C", "X", "B" }, column_ids(buf, 1))
+    end)
+
+    it("places an item moved to the top of a column at the top of the local order", function()
+      local _, buf = open_default_board()
+      key("j")
+      key("<C-l>")
+      key("k")
+      key("<CR>")
+      respond(3, field_updated("I3"))
+      respond(4, position_updated())
+      assert.same({ "I3", "I1", "I2", "R1" }, item_ids(buf))
+    end)
+
+    it("does not start a move while the items are being reloaded", function()
+      local _, buf = open_default_board()
+      key("r")
+      key("<C-l>")
+      assert.same({ { "GitHub projects: wait for the items to load before moving", vim.log.levels.ERROR } }, notices)
+      assert.is_nil(board.state(buf).moving)
+      assert.same({ "I1", "I3" }, column_ids(buf, 1))
+
+      respond(3, items_response(default_items()))
+      key("<C-l>")
+      assert.same({ "I1", "I2" }, column_ids(buf, 2))
+    end)
+
+    it("keeps the move when the same board is opened again during the move", function()
+      local _, buf = open_default_board()
+      key("<C-l>")
+      open_board(1)
+      assert.equals(2, #calls)
+      assert.same({ MOVE_BLOCKED }, notices)
+      assert.same({ "I1", "I2" }, column_ids(buf, 2))
+      assert.is_not_nil(board.state(buf).moving)
+    end)
+
+    it("cancels the move with q or <Esc> and restores the column and order", function()
+      local win, buf = open_default_board()
+      for _, cancel in ipairs({ "q", "<Esc>" }) do
+        key("<C-l>")
+        key("j")
+        assert.same({ "I2", "I1" }, column_ids(buf, 2))
+
+        key(cancel)
+        assert.same({ "I1", "I3" }, column_ids(buf, 1))
+        assert.same({ "I2" }, column_ids(buf, 2))
+        assert.same({ column_index = 1, item_id = "I1" }, board.state(buf).selected)
+        assert.equals(win, current_window("gh-projects-board"))
+        assert.equals(2, #calls)
+      end
+      key("q")
+      assert.is_nil(current_window("gh-projects-board"))
+    end)
+
+    it("keeps the move pending on failure and does not resend a saved group field", function()
+      local _, buf = open_default_board()
+      key("<C-l>")
+      key("j")
+      key("<CR>")
+      respond(3, field_updated("I1"))
+      fail(4, 1, "position failed")
+      local failure = "GitHub projects: GitHub request failed (exit 1): position failed"
+      assert.same({ { failure, vim.log.levels.ERROR } }, notices)
+      assert.same({ "I2", "I1" }, column_ids(buf, 2))
+
+      key("<CR>")
+      assert.equals(5, #calls)
+      assert.same({ projectId = "P1", itemId = "I1", afterId = "I2" }, variables(5))
+      respond(5, position_updated())
+      assert.same(MOVE_DONE, notices[2])
+    end)
+
+    it("restores the saved column when a partially saved move is cancelled", function()
+      local _, buf = open_default_board()
+      key("<C-l>")
+      key("j")
+      key("<CR>")
+      respond(3, field_updated("I1"))
+      fail(4, 1, "position failed")
+
+      key("q")
+      assert.same({ "I1", "I2" }, column_ids(buf, 2))
+      assert.same({ "I3" }, column_ids(buf, 1))
+      assert.equals("doing", board.selected_item(buf).values.status.option_id)
+    end)
+
+    it("ignores keys while the move is being saved", function()
+      local _, buf = open_default_board()
+      key("<C-l>")
+      key("<CR>")
+      key("<CR>")
+      key("q")
+      key("<C-l>")
+      assert.equals(3, #calls)
+      assert.same({ "I1", "I2" }, column_ids(buf, 2))
+      respond(3, field_updated("I1"))
+      assert.same({ MOVE_DONE }, notices)
+    end)
+
+    it("rejects other board operations during a move", function()
+      local _, buf = open_default_board()
+      key("<C-l>")
+      for _, other in ipairs({ "r", "h", "K", "ghe" }) do
+        key(other)
+      end
+      assert.equals(2, #calls)
+      assert.same({ MOVE_BLOCKED, MOVE_BLOCKED, MOVE_BLOCKED, MOVE_BLOCKED }, notices)
+      assert.same({ column_index = 2, item_id = "I1" }, board.state(buf).selected)
+      assert.equals(1, #float_windows())
+    end)
+
+    it("asks to select an item when the selected column is empty", function()
+      local _, buf = open_default_board()
+      key("l")
+      key("l")
+      key("<C-l>")
+      assert.same({ { "GitHub projects: select an item to move", vim.log.levels.ERROR } }, notices)
+      key("q")
+      assert.is_nil(current_window("gh-projects-board"))
+      assert.is_nil(board.state(buf))
+    end)
+  end)
+
   it("reuses an open board and refetches it", function()
     open_board(1)
     respond(1, detail_response(1, "Board"))

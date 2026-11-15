@@ -28,6 +28,11 @@ local HELP_ROWS = {
   { "ghe", "ボード: フィールドを編集" },
   { "ghn", "ボード: 項目を追加" },
   { "ghd", "ボード: 項目を削除" },
+  { "<C-h>", "ボード: 項目を前の列へ移動 (移動を開始)" },
+  { "<C-l>", "ボード: 項目を次の列へ移動 (移動を開始)" },
+  { "j/k", "移動中: 列の中で下/上へ移動" },
+  { "<CR>", "移動中: 移動を確定" },
+  { "q/<Esc>", "移動中: 移動を中止して元に戻す" },
   { "r", "一覧・ボード: 再取得" },
   { "?", "ヘルプを表示" },
   { "y", "確認: 削除する" },
@@ -455,6 +460,7 @@ local function fetch_items(buf, kind, filter, prefetched)
       state.body_cache = {}
       if replace then
         state.items = {}
+        state.moving = nil
       end
     end
     local before = column_size(state, state.selected.column_index)
@@ -581,6 +587,232 @@ local function select_item_at(buf, index)
   state.selected.item_id = column.items[index].id
   render(buf)
   maybe_load_more(buf)
+end
+
+local function find_item(state, item_id)
+  for index, item in ipairs(state.items) do
+    if item.id == item_id then
+      return item, index
+    end
+  end
+end
+
+local function column_ids(items, members)
+  local ids = {}
+  for _, item in ipairs(items) do
+    if members[item.id] then
+      ids[#ids + 1] = item.id
+    end
+  end
+  return ids
+end
+
+-- The order is compared within the column, not in the whole items list: j and
+-- k skip items of other columns, so a j/k round trip can change the global order
+-- while the column looks the same, and that must not send a position.
+local function column_reordered(state, moving, column)
+  local members = {}
+  for _, item in ipairs(column.items) do
+    members[item.id] = true
+  end
+  local baseline = vim.list_slice(state.items)
+  local item, index = find_item(state, moving.item_id)
+  table.remove(baseline, index)
+  table.insert(baseline, math.min(moving.origin.index, #baseline + 1), item)
+  return not vim.deep_equal(column_ids(state.items, members), column_ids(baseline, members))
+end
+
+local function set_group_value(state, item, value)
+  if not state.group_field then
+    return
+  end
+  item.values = type(item.values) == "table" and item.values or {}
+  item.values[state.group_field.id] = value
+end
+
+local function shift_column(buf, delta)
+  local state = states[buf]
+  local moving = state.moving
+  local current = state.selected.column_index
+  local target = math.max(1, math.min(#state.columns, current + delta))
+  if target ~= current then
+    local column = state.columns[target]
+    local item = find_item(state, moving.item_id)
+    set_group_value(
+      state,
+      item,
+      column.key and { kind = "single_select", value = column.key, option_id = column.key, name = column.name } or nil
+    )
+    rebuild(state, moving.item_id, target, 1)
+  end
+  render(buf)
+end
+
+local function shift_order(buf, delta)
+  local state = states[buf]
+  local moving = state.moving
+  local step = delta > 0 and 1 or -1
+  for _ = 1, math.abs(delta) do
+    local column = state.columns[state.selected.column_index]
+    local neighbor = column.items[item_index(column, moving.item_id) + step]
+    if not neighbor then
+      break
+    end
+    local item, index = find_item(state, moving.item_id)
+    table.remove(state.items, index)
+    local _, neighbor_index = find_item(state, neighbor.id)
+    table.insert(state.items, step > 0 and neighbor_index + 1 or neighbor_index, item)
+    rebuild(state, moving.item_id, state.selected.column_index, 1)
+  end
+  render(buf)
+end
+
+local function start_move(buf, delta)
+  local state = states[buf]
+  local item = M.selected_item(buf)
+  if not state or not item then
+    notify_error("select an item to move")
+    return
+  end
+  if state.loading and state.loading ~= "more" then
+    notify_error("wait for the items to load before moving")
+    return
+  end
+  local _, index = find_item(state, item.id)
+  state.moving = {
+    item_id = item.id,
+    pending = false,
+    origin = {
+      index = index,
+      value = state.group_field and type(item.values) == "table" and item.values[state.group_field.id] or nil,
+      column_key = state.columns[state.selected.column_index].key,
+    },
+  }
+  shift_column(buf, delta)
+end
+
+-- GitHub keeps the item where it was unless a position is sent, and puts it
+-- right after afterId (or at the top) when one is. j/k only reorder within the
+-- column, so the local items order must be put back the same way; otherwise a
+-- later column-only move would show an order that GitHub does not have.
+local function place_item(state, item_id, index)
+  local item, current = find_item(state, item_id)
+  if not item then
+    return
+  end
+  table.remove(state.items, current)
+  table.insert(state.items, math.max(1, math.min(index, #state.items + 1)), item)
+end
+
+local function place_after(state, item_id, after_id)
+  local item, current = find_item(state, item_id)
+  if not item then
+    return
+  end
+  table.remove(state.items, current)
+  local index = 1
+  if after_id then
+    local _, after_index = find_item(state, after_id)
+    index = after_index and after_index + 1 or index
+  end
+  table.insert(state.items, index, item)
+end
+
+local function cancel_move(buf)
+  local state = states[buf]
+  local moving = state.moving
+  local item = find_item(state, moving.item_id)
+  if item then
+    place_item(state, item.id, moving.origin.index)
+    set_group_value(state, item, moving.origin.value)
+  end
+  state.moving = nil
+  rebuild(state, moving.item_id, state.selected.column_index, 1)
+  render(buf)
+end
+
+local function confirm_move(buf)
+  local state = states[buf]
+  local moving = state.moving
+  local item = find_item(state, moving.item_id)
+  if not item then
+    state.moving = nil
+    render(buf)
+    return
+  end
+  local column = state.columns[state.selected.column_index]
+  local target_key = column.key
+  local position = item_index(column, item.id)
+  local after_id = position > 1 and column.items[position - 1].id or nil
+  local column_changed = target_key ~= moving.origin.column_key
+  -- The position is sent only when j/k changed the order: an omitted afterId
+  -- moves the item to the top of the whole project, so a column-only move must
+  -- not send it.
+  local reordered = column_reordered(state, moving, column)
+  if not column_changed and not reordered then
+    cancel_move(buf)
+    return
+  end
+
+  moving.pending = true
+  local api = require("github.features.projects.api").new()
+  local project_id = state.project.id
+  local function stale()
+    return states[buf] ~= state or state.moving ~= moving or not vim.api.nvim_buf_is_valid(buf)
+  end
+  local function failed(err)
+    moving.pending = false
+    notify_error(reason(err))
+    render(buf)
+  end
+  local function finish()
+    if reordered then
+      place_after(state, item.id, after_id)
+    else
+      place_item(state, item.id, moving.origin.index)
+    end
+    state.moving = nil
+    rebuild(state, item.id, state.selected.column_index, 1)
+    render(buf)
+    vim.notify("GitHub projects: move done", vim.log.levels.INFO)
+  end
+  local function save_position()
+    if not reordered then
+      return finish()
+    end
+    api.move_item(project_id, item.id, after_id, function(result, err)
+      if stale() then
+        return
+      end
+      if not result then
+        return failed(err)
+      end
+      finish()
+    end)
+  end
+
+  if not column_changed then
+    set_group_value(state, item, moving.origin.value)
+    return save_position()
+  end
+  local function saved_field(result, err)
+    if stale() then
+      return
+    end
+    if not result then
+      return failed(err)
+    end
+    -- The group field is already saved; a retry or cancel must start from it.
+    moving.origin.value = target_key and result.value or nil
+    moving.origin.column_key = target_key
+    set_group_value(state, item, moving.origin.value)
+    save_position()
+  end
+  if target_key then
+    api.update_field(project_id, item.id, state.group_field, target_key, saved_field)
+  else
+    api.clear_field(project_id, item.id, state.group_field.id, saved_field)
+  end
 end
 
 local function preview_header(item)
@@ -761,8 +993,14 @@ end
 
 local function setup_screen(buf, name)
   ui.buffer(buf, { readonly = true, filetype = "gh-projects-board" })
-  ui.keymaps(buf, {
+  local maps = {
     n = {
+      ["<C-h>"] = function()
+        start_move(buf, -vim.v.count1)
+      end,
+      ["<C-l>"] = function()
+        start_move(buf, vim.v.count1)
+      end,
       h = function()
         move_column(buf, state_column(buf) - vim.v.count1)
       end,
@@ -827,7 +1065,46 @@ local function setup_screen(buf, name)
         close(name)
       end,
     },
-  })
+  }
+  local move_actions = {
+    ["<C-h>"] = function()
+      shift_column(buf, -vim.v.count1)
+    end,
+    ["<C-l>"] = function()
+      shift_column(buf, vim.v.count1)
+    end,
+    j = function()
+      shift_order(buf, vim.v.count1)
+    end,
+    k = function()
+      shift_order(buf, -vim.v.count1)
+    end,
+    ["<CR>"] = function()
+      confirm_move(buf)
+    end,
+    q = function()
+      cancel_move(buf)
+    end,
+    ["<Esc>"] = function()
+      cancel_move(buf)
+    end,
+  }
+  for lhs, idle in pairs(maps.n) do
+    local action = move_actions[lhs]
+    maps.n[lhs] = function()
+      local state = states[buf]
+      local moving = state and state.moving
+      if not moving then
+        return idle()
+      end
+      if not action then
+        notify_error("finish the move with <CR> or cancel it with q")
+      elseif not moving.pending then
+        action()
+      end
+    end
+  end
+  ui.keymaps(buf, maps)
   vim.api.nvim_create_autocmd("BufWipeout", {
     buffer = buf,
     once = true,
@@ -856,6 +1133,10 @@ function M.open(opts)
   local name = board_name(resolved.owner, number)
   local existing_win, existing_buf = float.focus(name)
   if existing_win and states[existing_buf] then
+    if states[existing_buf].moving then
+      notify_error("finish the move with <CR> or cancel it with q")
+      return
+    end
     fetch_items(existing_buf, "refresh", states[existing_buf].filter)
     return
   end

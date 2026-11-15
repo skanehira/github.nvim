@@ -126,6 +126,12 @@ local delete_query = [[mutation($projectId: ID!, $itemId: ID!) {
   }
 }]]
 
+local move_query = [[mutation($projectId: ID!, $itemId: ID!, $afterId: ID) {
+  updateProjectV2ItemPosition(input: {projectId: $projectId, itemId: $itemId, afterId: $afterId}) {
+    clientMutationId
+  }
+}]]
+
 local content_query = [[query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     issueOrPullRequest(number: $number) {
@@ -1114,6 +1120,33 @@ function M.new(opts)
     )
   end
 
+  local function move_item(project_id, item_id, after_id, callback)
+    if not valid_id(project_id) then
+      return callback(nil, invalid("invalid project ID"))
+    end
+    if not valid_id(item_id) then
+      return callback(nil, invalid("invalid item ID"))
+    end
+    if after_id ~= nil and not valid_id(after_id) then
+      return callback(nil, invalid("invalid previous item ID"))
+    end
+    client.graphql(
+      { host = host },
+      move_query,
+      { projectId = project_id, itemId = item_id, afterId = after_id },
+      function(data, gh_failure)
+        if not data then
+          return callback(nil, classify(gh_failure))
+        end
+        local body = response_data(data)
+        if type(body) ~= "table" or type(body.updateProjectV2ItemPosition) ~= "table" then
+          return callback(nil, invalid_response("item move"))
+        end
+        callback({ item_id = item_id, after_id = after_id })
+      end
+    )
+  end
+
   local function fetch_body(target, repository, number, callback)
     local target_host = target and target.host
     if type(target_host) ~= "string" or target_host == "" then
@@ -1177,6 +1210,7 @@ function M.new(opts)
     add_item = add_item,
     add_draft = add_draft,
     delete_item = delete_item,
+    move_item = move_item,
   }
 end
 
